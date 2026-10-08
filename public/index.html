@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Migration Status</title>
+  <style>
+    :root {
+      --bg: #1a1f2b;
+      --surface: #1f2532;
+      --surface-2: #2d3340;
+      --border: #2a303d;
+      --text: #e6e8eb;
+      --muted: #8a93a3;
+      --accent: #59a5ff;
+      --accent-bg: rgba(89, 165, 255, 0.06);
+      --btn: #2d3340;
+      --btn-hover: #353c4b;
+      --err: #ff6b6b;
+      --err-bg: rgba(255, 107, 107, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 28px 32px 48px; }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    select, button {
+      font: inherit;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 14px;
+      cursor: pointer;
+    }
+    button { background: var(--btn); }
+    button:hover { background: var(--btn-hover); }
+    button:disabled { opacity: 0.6; cursor: default; }
+    .spin {
+      display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px;
+      border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Summary */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .summary .kpi + .kpi { border-left: 1px solid var(--border); }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .kpi { padding: 12px 20px; }
+    .kpi .label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi .value { font-size: 20px; font-weight: 650; margin: 2px 0 1px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+    .kpi .detail { color: var(--muted); font-size: 12.5px; }
+    .kpi .detail b { color: var(--text); font-weight: 600; }
+
+    /* Toolbar above DB grid */
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .section-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .search {
+      font: inherit; font-size: 13px; color: var(--text);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 7px 12px; width: 220px; max-width: 100%;
+    }
+    .search:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    /* Database cards */
+    /* One section per project, one database per row */
+    .project { margin-bottom: 40px; }
+    .project-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+    .project-name { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: 0.01em; }
+    .project-meta { color: var(--muted); font-size: 12.5px; }
+    .project-head .spacer { flex: 1; }
+    .teams-state { color: var(--muted); font-size: 12px; }
+    .teams-state.on { color: var(--accent); }
+    .teams-state.err { color: var(--err); }
+    .teams-panel { padding: 14px 20px; margin-bottom: 14px; }
+    .teams-panel[hidden] { display: none; }
+    .teams-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .teams-row + .teams-row { margin-top: 10px; }
+    .teams-panel .search { flex: 1; min-width: 260px; width: auto; }
+    .teams-panel label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+    .teams-help { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.5; }
+    .teams-msg { font-size: 12.5px; color: var(--muted); }
+    .teams-msg.err { color: var(--err); }
+    button.small { padding: 5px 12px; font-size: 12.5px; }
+
+    /* Hourly on/off switch */
+    .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; user-select: none; }
+    .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .switch .track {
+      width: 34px; height: 18px; border-radius: 999px; background: var(--btn); border: 1px solid var(--border);
+      position: relative; transition: background 0.15s;
+    }
+    .switch .track::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
+      background: var(--muted); transition: transform 0.15s, background 0.15s;
+    }
+    .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
+    .switch input:checked + .track::after { transform: translateX(16px); background: #fff; }
+    .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .switch input:disabled + .track { opacity: 0.45; }
+    .switch.disabled { cursor: default; color: var(--muted); }
+
+    .dbs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    .db-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 20px; border-bottom: 1px solid var(--border);
+    }
+    .db-name { font-size: 15px; font-weight: 600; }
+    .db-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+    .combo {
+      font-size: 11.5px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+      color: var(--accent); background: var(--accent-bg); border: 1px solid rgba(89, 165, 255, 0.25);
+    }
+    .combo.more { color: var(--muted); background: transparent; border-color: var(--border); }
+    .pill {
+      font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+      background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums;
+    }
+    .colls { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+    .colls + .colls { border-top: 1px solid var(--border); }
+    .coll { padding: 14px 20px 16px; min-width: 0; }
+    .coll + .coll { border-left: 1px solid var(--border); }
+    .coll-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .coll-name { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .coll-total { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .head-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    button.copy {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 8px; font-size: 12px; font-weight: 500; color: var(--muted);
+      background: transparent; border: 1px solid var(--border); border-radius: 6px;
+    }
+    button.copy:hover { color: var(--text); background: var(--surface-2); }
+    button.copy.done { color: var(--accent); border-color: var(--accent); }
+    button.copy svg { width: 13px; height: 13px; flex: none; }
+    button.copy.icon-only { padding: 4px 5px; }
+
+    .rows { list-style: none; margin: 0; padding: 0; }
+    .rows li {
+      display: grid; grid-template-columns: minmax(0, 1fr) 110px 64px; align-items: center; gap: 12px;
+      padding: 7px 4px; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+    }
+    .rows li:last-child { border-bottom: 0; }
+    .rows li.th {
+      color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 6px 4px; border-bottom: 1px solid var(--border);
+    }
+    .rows li.th span:not(:first-child) { text-align: right; }
+    .rows li:not(.th):hover { background: rgba(255, 255, 255, 0.025); }
+    .status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .count { font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; }
+    .pct { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    .error {
+      margin: 0; padding: 10px 12px; border-radius: 8px;
+      background: var(--err-bg); color: var(--err); font-size: 12.5px; word-break: break-word;
+    }
+    .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+    .section-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .add-form { display: flex; gap: 6px; }
+    .add-form .search { width: 200px; }
+    .add-msg { font-size: 12.5px; color: var(--muted); margin: -4px 0 12px; min-height: 0; }
+    .add-msg.err { color: var(--err); }
+    .no-dbs {
+      grid-column: 1 / -1; padding: 40px 20px; text-align: center; color: var(--muted);
+      border: 1px dashed var(--border); border-radius: 10px;
+    }
+    button.copy.remove:hover { color: var(--err); border-color: var(--err); }
+
+    /* Loading skeleton */
+    .skel { background: var(--surface-2); border-radius: 6px; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.5; } }
+    .loading-overlay { opacity: 0.55; transition: opacity 0.2s; pointer-events: none; }
+
+    .banner { margin-bottom: 20px; }
+
+    @media (max-width: 720px) {
+      .wrap { padding: 20px 16px 40px; }
+      .colls { grid-template-columns: 1fr; }
+      .coll + .coll { border-left: 0; border-top: 1px solid var(--border); }
+      .search { width: 100%; }
+    }
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Migration Status</h1>
+        <div class="sub">ProcessStatus counts from MessageEachFiles and MessageWorkSpace<span id="excluded"></span></div>
+      </div>
+      <div class="controls">
+        <span class="updated" id="updated"></span>
+        <select id="auto" aria-label="Auto refresh">
+          <option value="0">Auto-refresh: off</option>
+          <option value="60">Every 1 min</option>
+          <option value="300">Every 5 min</option>
+          <option value="900">Every 15 min</option>
+        </select>
+        <button id="refresh">Refresh</button>
+      </div>
+    </header>
+
+    <div id="banner"></div>
+
+    <div class="section-head">
+      <h2 id="db-heading">Projects</h2>
+      <div class="section-tools">
+        <form class="add-form" id="add-form" autocomplete="off">
+          <input class="search" id="add-name" list="db-options" placeholder="Add database…" aria-label="Database to add" />
+          <datalist id="db-options"></datalist>
+          <button type="submit" id="add-btn">Add</button>
+        </form>
+        <input class="search" id="search" type="search" placeholder="Filter databases…" aria-label="Filter databases" />
+      </div>
+    </div>
+    <div class="add-msg" id="add-msg" role="status"></div>
+    <div id="projects"></div>
+  </div>
+
+  <script>
+    const fmt = new Intl.NumberFormat('en-US');
+    const pctFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
+    const isDone = s => /^PROCESSED/.test(String(s ?? ''));
+    const isConflict = s => /CONFLICT/.test(String(s ?? '')) && !/^PROCESSED/.test(String(s ?? ''));
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+
+    function stats(rows) {
+      let total = 0, done = 0, conflicts = 0;
+      for (const [s, c] of rows) {
+        const n = Number(c) || 0;
+        total += n;
+        if (isDone(s)) done += n;
+        if (isConflict(s)) conflicts += n;
+      }
+      return { total, done, conflicts };
+    }
+
+    function pct(part, total) {
+      if (!total) return '—';
+      const p = (part / total) * 100;
+      return p > 0 && p < 0.1 ? '<0.1%' : pctFmt.format(p) + '%';
+    }
+
+    // Cloud names as stored in MessageWorkSpace.fromCloudName / toCloudName
+    const CLOUD_LABELS = {
+      MICROSOFT_TEAMS: 'Teams',
+      SLACK: 'Slack',
+      GOOGLE_CHAT: 'Google Chat',
+    };
+    function cloudLabel(name) {
+      if (!name) return 'Unknown';
+      if (CLOUD_LABELS[name]) return CLOUD_LABELS[name];
+      return String(name).toLowerCase().split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+    const comboLabel = c => `${cloudLabel(c.from)} to ${cloudLabel(c.to)}`;
+    const MAX_COMBOS_SHOWN = 3;
+
+    const sortRows = rows => [...rows].sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
+
+    // Tab-separated so it pastes into Excel/Sheets as columns and still reads as text
+    function collectionText(database, c) {
+      const lines = [`${database} - ${c.collection}`];
+      if (c.error) {
+        lines.push('Error: ' + c.error);
+        return lines.join('\n');
+      }
+      const rows = sortRows(c.rows);
+      const { total } = stats(rows);
+      lines.push('ProcessStatus\tCount\t%');
+      for (const [status, count] of rows) {
+        const n = Number(count) || 0;
+        lines.push(`${status ?? '(null)'}\t${fmt.format(n)}\t${pct(n, total)}`);
+      }
+      lines.push(`Total\t${fmt.format(total)}\t${total ? '100%' : '—'}`);
+      return lines.join('\n');
+    }
+
+    function dbText(result) {
+      if (result.error) return `${result.database}\nError: ${result.error}`;
+      const combos = (result.combinations || []).map(comboLabel);
+      const title = combos.length ? `${result.database} (${combos.join(', ')})` : result.database;
+      return [...(result.workspace || []), ...(result.files || [])].map(c => collectionText(title, c)).join('\n\n');
+    }
+
+    async function writeClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch {}
+      // Fallback for browsers that block the async clipboard API
+      const ta = el('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      if (!ok) throw new Error('Copy failed');
+    }
+
+    // Copies HTML (pastes into Teams/Outlook/Excel as a real table) with a plain-text fallback
+    async function writeRichClipboard(html, text) {
+      try {
+        if (window.ClipboardItem && navigator.clipboard?.write) {
+          await navigator.clipboard.write([new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([text], { type: 'text/plain' })
+          })]);
+          return;
+        }
+      } catch {}
+      await writeClipboard(text);
+    }
+
+    const escapeHtml = v => String(v).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+    // Same layout as the Teams card: project totals, then one block per database with
+    // workspace row (MessageWorkSpace | Channels | DMs) and files row (MessageEachFiles | Channels | DMs)
+    function projectTableContent(project, dbResults) {
+      const combos = [...new Set(dbResults.flatMap(r => (r.combinations || []).map(comboLabel)))];
+      const when = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      const title = `${project} – Migration status`;
+      const subtitle = [combos.join(', '), `${dbResults.length} database${dbResults.length === 1 ? '' : 's'}`, when]
+        .filter(Boolean).join(' · ');
+
+      const summaryDefs = [
+        { name: 'MessageWorkSpace', get: r => r.workspace && r.workspace[0] },
+        { name: 'MessageEachFiles', get: r => r.files && r.files[0] },
+      ];
+      const totals = summaryDefs.map(({ name, get }) => {
+        const m = new Map();
+        for (const r of dbResults) {
+          const c = get(r);
+          if (c && !c.error) for (const [st, n] of c.rows) m.set(st, (m.get(st) || 0) + (Number(n) || 0));
+        }
+        return { name, ...stats([...m.entries()]) };
+      });
+      const summary = totals.map(t => `${t.name}: ${fmt.format(t.total)} (Processed ${fmt.format(t.done)} · Conflicts ${fmt.format(t.conflicts)})`);
+
+      const cell = 'border:1px solid #999;padding:3px 8px;';
+      const td = (v, { right = false, bold = false } = {}) =>
+        `<td style="${cell}text-align:${right ? 'right' : 'left'}">${bold ? `<b>${escapeHtml(v)}</b>` : escapeHtml(v)}</td>`;
+      let html = `<p><b>${escapeHtml(title)}</b><br>${escapeHtml(subtitle)}<br>${summary.map(escapeHtml).join('<br>')}</p>`;
+      const lines = [title, subtitle, ...summary];
+
+      const wsNames = ['MessageWorkSpace', 'Channels', 'Direct Messages'];
+      const efNames = ['MessageEachFiles', 'Channels', 'Direct Messages'];
+
+      for (const r of dbResults) {
+        const heading = [r.database, ...(r.combinations || []).map(comboLabel)].join(' · ');
+        html += `<p><b>${escapeHtml(heading)}</b></p>`;
+        lines.push('', heading);
+        if (r.error) {
+          html += `<p>${escapeHtml(r.error)}</p>`;
+          lines.push(r.error);
+          continue;
+        }
+        for (const [arr, names] of [[r.workspace || [], wsNames], [r.files || [], efNames]]) {
+          const cols = names.map((name, i) => {
+            const c = arr[i];
+            if (!c || c.error) return { rows: [], total: null, error: c?.error || 'Not available' };
+            const rows = sortRows(c.rows).map(([st, n]) => [st ?? '(null)', Number(n) || 0]);
+            return { rows, total: stats(rows).total };
+          });
+          const height = Math.max(...cols.map(c => c.rows.length), 0);
+          html += '<table style="border-collapse:collapse;margin-bottom:6px"><tr>' +
+            names.map(n => `<th style="${cell}text-align:left">${n}</th><th style="${cell}text-align:right">Count</th>`).join('') + '</tr>';
+          lines.push(names.map(n => `${n}\tCount`).join('\t'));
+          for (let i = 0; i < height; i++) {
+            const pairs = cols.map(c => c.rows[i] ? [c.rows[i][0], fmt.format(c.rows[i][1])] : ['', '']);
+            html += '<tr>' + pairs.map(([st, n]) => td(st) + td(n, { right: true })).join('') + '</tr>';
+            lines.push(pairs.map(pr => pr.join('\t')).join('\t'));
+          }
+          const totalPairs = cols.map(c => c.total === null ? ['Error', c.error] : ['Total', fmt.format(c.total)]);
+          html += '<tr>' + totalPairs.map(([a, b]) => td(a, { bold: true }) + td(b, { right: true, bold: true })).join('') + '</tr></table>';
+          lines.push(totalPairs.map(pr => pr.join('\t')).join('\t'));
+        }
+      }
+      return { html, text: lines.join('\n') };
+    }
+
+    const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>';
+
+    function copyButton(label, getText, iconOnly = false, buttonText = 'Copy') {
+      const btn = el('button', iconOnly ? 'copy icon-only' : 'copy');
+      btn.type = 'button';
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+      const show = text => { btn.innerHTML = COPY_ICON + (iconOnly ? '' : text); btn.title = iconOnly ? text : label; };
+      const reset = () => { btn.classList.remove('done'); show(buttonText); btn.title = label; };
+      reset();
+      btn.addEventListener('click', async () => {
+        try {
+          const content = getText();
+          if (typeof content === 'string') await writeClipboard(content);
+          else await writeRichClipboard(content.html, content.text);
+          btn.classList.add('done');
+          show('Copied');
+        } catch {
+          show('Copy failed');
+        }
+        clearTimeout(btn._t);
+        btn._t = setTimeout(reset, 1500);
+      });
+      return btn;
+    }
+
+    function renderCollection(c, database) {
+      const box = el('div', 'coll');
+      const head = el('div', 'coll-head');
+      const left = el('div', 'head-group');
+      left.appendChild(el('span', 'coll-name', c.collection));
+      left.appendChild(copyButton(`Copy ${c.collection} statuses for ${database}`, () => collectionText(database, c), true));
+      head.appendChild(left);
+      box.appendChild(head);
+
+      if (c.error) {
+        box.appendChild(el('p', 'error', c.error));
+        return box;
+      }
+
+      const rows = sortRows(c.rows);
+      const { total } = stats(rows);
+      head.appendChild(el('span', 'coll-total', fmt.format(total)));
+
+      if (!rows.length) {
+        box.appendChild(el('div', 'empty', 'No records'));
+        return box;
+      }
+
+      const list = el('ul', 'rows');
+      const th = el('li', 'th');
+      th.append(el('span', null, 'ProcessStatus'), el('span', null, 'Count'), el('span', null, '%'));
+      list.appendChild(th);
+      for (const [status, count] of rows) {
+        const li = el('li');
+        const name = el('span', 'status', status ?? '(null)');
+        name.title = status ?? '(null)';
+        li.appendChild(name);
+        li.appendChild(el('span', 'count', fmt.format(Number(count) || 0)));
+        li.appendChild(el('span', 'pct', pct(Number(count) || 0, total)));
+        list.appendChild(li);
+      }
+      box.appendChild(list);
+      return box;
+    }
+
+    function renderDb(result) {
+      if (result._pending) {
+        const card = el('section', 'card');
+        card.dataset.name = result.database.toLowerCase();
+        const head = el('div', 'db-head');
+        const title = el('div', 'db-title');
+        title.appendChild(el('span', 'db-name', result.database));
+        head.appendChild(title);
+        card.appendChild(head);
+        const body = el('div', 'coll');
+        body.style.cssText = 'padding:20px;min-height:100px';
+        for (let j = 0; j < 4; j++) {
+          const r = el('div', 'skel'); r.style.cssText = 'height:12px;margin:12px 0;width:' + (90 - j * 15) + '%';
+          body.appendChild(r);
+        }
+        card.appendChild(body);
+        return card;
+      }
+      const card = el('section', 'card');
+      card.dataset.name = result.database.toLowerCase();
+      const head = el('div', 'db-head');
+      const title = el('div', 'db-title');
+      title.appendChild(el('span', 'db-name', result.database));
+      const combos = result.combinations || [];
+      for (const c of combos.slice(0, MAX_COMBOS_SHOWN)) {
+        const tag = el('span', 'combo', comboLabel(c));
+        tag.title = `${c.from} → ${c.to}: ${fmt.format(c.count)} workspaces`;
+        title.appendChild(tag);
+      }
+      if (combos.length > MAX_COMBOS_SHOWN) {
+        const rest = combos.slice(MAX_COMBOS_SHOWN);
+        const more = el('span', 'combo more', `+${rest.length} more`);
+        more.title = rest.map(c => `${comboLabel(c)}: ${fmt.format(c.count)} workspaces`).join('\n');
+        title.appendChild(more);
+      }
+      head.appendChild(title);
+      const right = el('div', 'head-group');
+      head.appendChild(right);
+      card.appendChild(head);
+
+      const remove = el('button', 'copy icon-only remove', '✕');
+      remove.type = 'button';
+      remove.title = `Remove ${result.database} from the dashboard`;
+      remove.setAttribute('aria-label', remove.title);
+      remove.addEventListener('click', () => removeDatabase(result.database));
+
+      if (result.error) {
+        right.appendChild(remove);
+        const body = el('div', 'coll');
+        body.appendChild(el('p', 'error', result.error));
+        card.appendChild(body);
+        return card;
+      }
+
+      const filesTotal = result.files && result.files[0] && !result.files[0].error ? result.files[0] : null;
+      if (filesTotal) {
+        const s = stats(filesTotal.rows);
+        const pill = el('span', 'pill', `${pct(s.done, s.total)} files processed`);
+        pill.title = 'Share of MessageEachFiles with a PROCESSED status';
+        right.appendChild(pill);
+      }
+      right.appendChild(copyButton(`Copy all statuses for ${result.database}`, () => dbText(result)));
+      right.appendChild(remove);
+
+      const wsGrid = el('div', 'colls');
+      for (const c of result.workspace || []) wsGrid.appendChild(renderCollection(c, result.database));
+      card.appendChild(wsGrid);
+
+      const efGrid = el('div', 'colls');
+      for (const c of result.files || []) efGrid.appendChild(renderCollection(c, result.database));
+      card.appendChild(efGrid);
+      return card;
+    }
+
+    // Databases of the same customer project share a base name:
+    // ajg-SDB, ajg2-SDB, ajg3-SDB, ajg4 -> AJG; horbergmsg, horbergemail-new -> HORBERG
+    function projectOf(database) {
+      const original = database.trim().toLowerCase();
+      let n = original, prev;
+      do {
+        prev = n;
+        n = n
+          .replace(/[-_ ]?(sdb|new)$/, '')
+          .replace(/[-_ ]?\d+$/, '')
+          .replace(/(msg|message|messages|email|emails|mail)$/, '')
+          .replace(/[-_ ]+$/, '');
+      } while (n !== prev && n);
+      return (n || original).toUpperCase();
+    }
+
+    function groupByProject(list) {
+      const groups = new Map();
+      for (const r of list) {
+        const key = r.project || projectOf(r.database);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+      for (const dbs of groups.values()) {
+        dbs.sort((a, b) => a.database.localeCompare(b.database, undefined, { numeric: true, sensitivity: 'base' }));
+      }
+      return groups;
+    }
+
+    function renderSummary(results) {
+      // Merge workspace[0] and files[0] totals across all databases
+      const merged = new Map();
+      for (const r of results) {
+        for (const c of [r.workspace && r.workspace[0], r.files && r.files[0]]) {
+          if (!c || c.error) continue;
+          const m = merged.get(c.collection) || new Map();
+          for (const [s, n] of c.rows) m.set(s, (m.get(s) || 0) + (Number(n) || 0));
+          merged.set(c.collection, m);
+        }
+      }
+
+      const summary = el('div', 'card summary');
+      const okDbs = results.filter(r => !r.error).length;
+
+      const dbCard = el('div', 'kpi');
+      dbCard.appendChild(el('div', 'label', 'Databases'));
+      dbCard.appendChild(el('div', 'value', fmt.format(results.length)));
+      const failed = results.length - okDbs;
+      const d = el('div', 'detail');
+      d.textContent = failed ? `${okDbs} loaded · ${failed} failed` : 'All loaded successfully';
+      dbCard.appendChild(d);
+      summary.appendChild(dbCard);
+
+      for (const [collection, m] of merged) {
+        const rows = [...m.entries()].sort((a, b) => b[1] - a[1]);
+        const s = stats(rows);
+        const card = el('div', 'kpi');
+        card.appendChild(el('div', 'label', collection));
+        card.appendChild(el('div', 'value', fmt.format(s.total)));
+        const detail = el('div', 'detail');
+        detail.append('Processed ', el('b', null, pct(s.done, s.total)), ' · Conflicts ', el('b', null, fmt.format(s.conflicts)));
+        card.appendChild(detail);
+        summary.appendChild(card);
+      }
+      return summary;
+    }
+
+    // Teams settings per project, as returned by the server
+    let projectInfo = {};
+    const openPanels = new Set();
+
+    function describeTeams(info) {
+      if (!info?.webhookConfigured) return { text: 'Teams: not set up', cls: '' };
+      if (info.lastError && (!info.lastSentAt || info.lastError > info.lastSentAt)) {
+        return { text: 'Teams: last send failed', cls: 'err' };
+      }
+      const last = info.lastSentAt ? ` · last sent ${new Date(info.lastSentAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
+      return info.hourly
+        ? { text: `Teams: hourly on${last}`, cls: 'on' }
+        : { text: `Teams: hourly off${last}`, cls: '' };
+    }
+
+    function renderTeamsPanel(project, stateEl, { headSend, hourly, hourlyInput }) {
+      const panel = el('div', 'card teams-panel');
+      panel.hidden = !openPanels.has(project);
+
+      const urlInput = el('input', 'search');
+      urlInput.type = 'password';
+      urlInput.autocomplete = 'off';
+      urlInput.setAttribute('aria-label', `Teams webhook URL for ${project}`);
+      const save = el('button', 'small', 'Save URL');
+      save.type = 'button';
+      const row1 = el('div', 'teams-row');
+      row1.append(urlInput, save);
+
+      const msg = el('span', 'teams-msg');
+      const row2 = el('div', 'teams-row');
+      row2.append(msg);
+
+      const help = el('div', 'teams-help',
+        `To get the URL: in Teams open Apps → Workflows → search “Send webhook alerts to a chat” → pick the ${project} group chat → Save. ` +
+        'Then open that workflow, click its first step “When a Teams webhook request is received”, and copy the HTTP URL ' +
+        '(it ends in logic.azure.com or powerplatform.com). The dashboard server must be running for hourly posts.');
+      panel.append(row1, row2, help);
+
+      const setMsg = (text, isError = false) => { msg.textContent = text; msg.className = isError ? 'teams-msg err' : 'teams-msg'; };
+      const refresh = () => {
+        const info = projectInfo[project] || {};
+        const d = describeTeams(info);
+        stateEl.textContent = d.text;
+        stateEl.className = 'teams-state ' + d.cls;
+        urlInput.placeholder = info.webhookConfigured
+          ? `Saved: ${info.webhookPreview} (paste a new URL to replace it)`
+          : 'Paste the Teams Workflows webhook URL';
+        hourlyInput.checked = Boolean(info.hourly);
+        hourlyInput.disabled = !info.webhookConfigured;
+        hourly.classList.toggle('disabled', !info.webhookConfigured);
+        hourly.title = info.webhookConfigured
+          ? `Post the ${project} status to Teams automatically at the start of every hour`
+          : 'Save a Teams webhook URL in Teams settings first';
+        headSend.disabled = !info.webhookConfigured;
+        headSend.title = info.webhookConfigured
+          ? `Send the latest ${project} statuses to Teams now`
+          : 'Save a Teams webhook URL in Teams settings first';
+        if (info.lastError && d.cls === 'err') setMsg(info.lastError, true);
+      };
+
+      async function update(body) {
+        const res = await fetch(`/api/projects/${encodeURIComponent(project)}/teams`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+        projectInfo[project] = json;
+        refresh();
+      }
+
+      save.addEventListener('click', async () => {
+        const url = urlInput.value.trim();
+        if (!url) return setMsg('Paste the webhook URL first', true);
+        save.disabled = true;
+        try {
+          await update({ webhookUrl: url });
+          urlInput.value = '';
+          setMsg('Webhook saved. Use Send now to test it and the Hourly to Teams switch for automatic posts.');
+        } catch (err) {
+          setMsg(err.message, true);
+        } finally {
+          save.disabled = false;
+        }
+      });
+
+      hourlyInput.addEventListener('change', async () => {
+        const on = hourlyInput.checked;
+        hourlyInput.disabled = true;
+        try {
+          await update({ hourly: on });
+          setMsg(on ? 'Hourly updates on: posts at the start of every hour.' : 'Hourly updates off.');
+        } catch (err) {
+          hourlyInput.checked = !on;
+          setMsg(err.message, true);
+          panel.hidden = false;
+          openPanels.add(project);
+        } finally {
+          refresh();
+        }
+      });
+
+      async function send() {
+        headSend.disabled = true;
+        headSend.textContent = 'Sending…';
+        setMsg(`Sending ${project} status to Teams…`);
+        try {
+          const res = await fetch(`/api/projects/${encodeURIComponent(project)}/teams/send`, { method: 'POST' });
+          const json = await res.json();
+          projectInfo[project] = { ...projectInfo[project], ...json, error: undefined };
+          if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+          setMsg('Sent once. Check the Teams chat. (This does not change hourly updates.)');
+        } catch (err) {
+          setMsg(err.message, true);
+          // Show the error even if the settings panel was closed
+          panel.hidden = false;
+          openPanels.add(project);
+        } finally {
+          headSend.textContent = 'Send now';
+          refresh();
+        }
+      }
+      headSend.addEventListener('click', send);
+
+      refresh();
+      return panel;
+    }
+
+    function renderProject(project, dbResults) {
+      const section = el('section', 'project');
+      section.dataset.project = project.toLowerCase();
+      const head = el('div', 'project-head');
+      head.appendChild(el('h2', 'project-name', project));
+      const combos = new Set(dbResults.flatMap(r => (r.combinations || []).map(comboLabel)));
+      const meta = [`${dbResults.length} database${dbResults.length === 1 ? '' : 's'}`, ...combos].join(' · ');
+      head.appendChild(el('span', 'project-meta', meta));
+      head.appendChild(el('span', 'spacer'));
+      const state = el('span', 'teams-state');
+      head.appendChild(state);
+      const copyTeams = copyButton(`Copy ${project} tables to paste into Teams`,
+        () => projectTableContent(project, dbResults), false, 'Copy for Teams');
+      head.appendChild(copyTeams);
+      const headSend = el('button', 'small', 'Send now');
+      headSend.type = 'button';
+      head.appendChild(headSend);
+
+      const hourly = el('label', 'switch');
+      const hourlyInput = el('input');
+      hourlyInput.type = 'checkbox';
+      hourlyInput.setAttribute('role', 'switch');
+      hourly.append(hourlyInput, el('span', 'track'), 'Hourly to Teams');
+
+      const toggle = el('button', 'small', 'Teams settings');
+      toggle.type = 'button';
+      toggle.title = `Teams webhook for ${project}`;
+      head.appendChild(toggle);
+      head.appendChild(hourly);
+      section.appendChild(head);
+
+      const panel = renderTeamsPanel(project, state, { headSend, hourly, hourlyInput });
+      toggle.addEventListener('click', () => {
+        panel.hidden = !panel.hidden;
+        if (panel.hidden) openPanels.delete(project); else openPanels.add(project);
+      });
+      section.appendChild(panel);
+      section.appendChild(renderSummary(dbResults.filter(r => !r._pending)));
+      const grid = el('div', 'dbs');
+      for (const r of dbResults) grid.appendChild(renderDb(r));
+      section.appendChild(grid);
+      return section;
+    }
+
+    function renderSkeleton() {
+      const summary = el('div', 'card summary');
+      const dbs = el('div', 'dbs');
+      document.getElementById('projects').replaceChildren(summary, dbs);
+      for (let i = 0; i < 3; i++) {
+        const c = el('div', 'kpi');
+        const a = el('div', 'skel'); a.style.cssText = 'height:12px;width:40%';
+        const b = el('div', 'skel'); b.style.cssText = 'height:28px;width:60%;margin:10px 0';
+        const d = el('div', 'skel'); d.style.cssText = 'height:8px;width:100%';
+        c.append(a, b, d);
+        summary.appendChild(c);
+      }
+      for (let i = 0; i < 2; i++) {
+        const c = el('div', 'card');
+        c.style.cssText = 'padding:20px;min-height:220px';
+        const a = el('div', 'skel'); a.style.cssText = 'height:16px;width:30%;margin-bottom:20px';
+        c.appendChild(a);
+        for (let j = 0; j < 5; j++) {
+          const r = el('div', 'skel'); r.style.cssText = 'height:12px;margin:12px 0;width:' + (90 - j * 10) + '%';
+          c.appendChild(r);
+        }
+        dbs.appendChild(c);
+      }
+    }
+
+    function applyFilter() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      let shown = 0, total = 0, projectsShown = 0, projectsTotal = 0;
+      for (const section of document.querySelectorAll('#projects > .project')) {
+        projectsTotal++;
+        const projectMatch = !q || section.dataset.project.includes(q);
+        let any = false;
+        for (const card of section.querySelectorAll('.dbs > [data-name]')) {
+          total++;
+          const match = projectMatch || card.dataset.name.includes(q);
+          card.hidden = !match;
+          if (match) { shown++; any = true; }
+        }
+        section.hidden = !any;
+        if (any) projectsShown++;
+      }
+      document.getElementById('db-heading').textContent = q
+        ? `Projects (${projectsShown} of ${projectsTotal}) · Databases (${shown} of ${total})`
+        : `Projects (${projectsTotal}) · Databases (${total})`;
+    }
+
+    let hasData = false;
+    let loading = false;
+    let results = [];
+    let pendingDatabases = new Set();
+
+    function renderAll() {
+      const container = document.getElementById('projects');
+      const loadedNames = new Set(results.map(r => r.database.toLowerCase()));
+      const pendingList = [...pendingDatabases]
+        .filter(name => !loadedNames.has(name.toLowerCase()))
+        .map(name => ({ database: name, project: projectOf(name), _pending: true }));
+      const allItems = [...results, ...pendingList];
+      if (allItems.length) {
+        const groups = groupByProject(allItems);
+        container.replaceChildren(...[...groups].map(([project, dbs]) => renderProject(project, dbs)));
+      } else {
+        container.replaceChildren(el('div', 'no-dbs', 'No databases on the dashboard yet. Use “Add database” above.'));
+      }
+      applyFilter();
+    }
+
+    function setAddMsg(text, isError = false) {
+      const msg = document.getElementById('add-msg');
+      msg.textContent = text;
+      msg.className = isError ? 'add-msg err' : 'add-msg';
+    }
+
+    async function loadOptions() {
+      try {
+        const res = await fetch('/api/databases');
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+        const selected = new Set(json.selected.map(n => n.toLowerCase()));
+        const options = json.available.filter(n => !selected.has(n.toLowerCase()));
+        document.getElementById('db-options').replaceChildren(...options.map(n => {
+          const o = el('option');
+          o.value = n;
+          return o;
+        }));
+      } catch (err) {
+        setAddMsg('Could not load the database list from Metabase: ' + err.message, true);
+      }
+    }
+
+    async function addDatabase(name) {
+      const btn = document.getElementById('add-btn');
+      const input = document.getElementById('add-name');
+      btn.disabled = true;
+      setAddMsg(`Adding ${name}…`);
+      try {
+        const res = await fetch('/api/databases', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+
+        input.value = '';
+        setAddMsg(`Loading statuses for ${json.name}…`);
+        const statusRes = await fetch('/api/process-status?database=' + encodeURIComponent(json.name));
+        const statusJson = await statusRes.json();
+        if (!statusRes.ok) throw new Error(statusJson.error || `HTTP ${statusRes.status}`);
+        projectInfo = { ...(statusJson.projects || {}), ...projectInfo };
+        results = results.filter(r => r.database.toLowerCase() !== json.name.toLowerCase())
+          .concat(statusJson.results);
+        renderAll();
+        setAddMsg(`Added ${json.name}.`);
+        loadOptions();
+      } catch (err) {
+        setAddMsg(err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function removeDatabase(name) {
+      if (!confirm(`Remove ${name} from the dashboard?`)) return;
+      try {
+        const res = await fetch('/api/databases/' + encodeURIComponent(name), { method: 'DELETE' });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+        results = results.filter(r => r.database !== name);
+        renderAll();
+        setAddMsg(`Removed ${name}.`);
+        loadOptions();
+      } catch (err) {
+        setAddMsg(err.message, true);
+      }
+    }
+
+    async function load() {
+      if (loading) return;
+      loading = true;
+      const btn = document.getElementById('refresh');
+      const dbs = document.getElementById('projects');
+      const banner = document.getElementById('banner');
+      btn.disabled = true;
+      btn.replaceChildren(el('span', 'spin'), 'Refreshing');
+      if (hasData) dbs.classList.add('loading-overlay');
+
+      if (window._statusStream) { window._statusStream.close(); window._statusStream = null; }
+      pendingDatabases = new Set();
+
+      await new Promise((resolve) => {
+        const es = new EventSource('/api/process-status/stream');
+        window._statusStream = es;
+
+        const finish = () => {
+          es.close();
+          window._statusStream = null;
+          pendingDatabases = new Set();
+          dbs.classList.remove('loading-overlay');
+          btn.disabled = false;
+          btn.textContent = 'Refresh';
+          loading = false;
+          resolve();
+        };
+
+        es.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'init') {
+            msg.databases.forEach(name => pendingDatabases.add(name));
+            renderAll();
+          } else if (msg.type === 'result') {
+            pendingDatabases.delete(msg.database);
+            results = results.filter(r => r.database.toLowerCase() !== msg.database.toLowerCase()).concat(msg);
+            renderAll();
+            hasData = true;
+          } else if (msg.type === 'done') {
+            projectInfo = { ...projectInfo, ...(msg.projects || {}) };
+            banner.replaceChildren();
+            const domains = msg.excludedOwnerDomains || [];
+            document.getElementById('excluded').textContent = domains.length
+              ? ` · excluding users and workspace owners with ${domains.map(d => '@' + d).join(', ')}`
+              : '';
+            const when = new Date(msg.fetchedAt || Date.now());
+            document.getElementById('updated').textContent = 'Updated ' + when.toLocaleTimeString();
+            finish();
+          }
+        };
+
+        es.onerror = () => {
+          if (!hasData) {
+            const p = el('p', 'error banner', 'Could not load data: connection failed');
+            banner.replaceChildren(p);
+            dbs.replaceChildren();
+          }
+          finish();
+        };
+      });
+    }
+
+    // Preferences are a convenience only; storage may be unavailable
+    function pref(key, value) {
+      try {
+        if (value === undefined) return localStorage.getItem(key);
+        localStorage.setItem(key, value);
+      } catch {}
+      return null;
+    }
+
+    let timer = null;
+    const auto = document.getElementById('auto');
+    function setAuto(seconds) {
+      clearInterval(timer);
+      timer = seconds > 0 ? setInterval(load, seconds * 1000) : null;
+    }
+    auto.value = pref('autoRefresh') || '0';
+    setAuto(Number(auto.value));
+    auto.addEventListener('change', () => { pref('autoRefresh', auto.value); setAuto(Number(auto.value)); });
+
+    document.getElementById('search').addEventListener('input', applyFilter);
+    document.getElementById('add-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = document.getElementById('add-name').value.trim();
+      if (name) addDatabase(name);
+    });
+    loadOptions();
+    document.getElementById('refresh').addEventListener('click', load);
+    load();
+  </script>
+</body>
+</html>
