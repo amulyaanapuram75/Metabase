@@ -162,6 +162,24 @@ async function findDatabaseId(name) {
   return db.id;
 }
 
+// Cached per database ID so metadata is only fetched once per server run.
+const dbTypeCache = new Map();
+const CONTENT_COLLECTIONS = ['FilefolderInfo', 'FolderMetadataInfo', 'CollaborationDetails', 'Hyperlinks'];
+
+async function getDatabaseType(databaseId) {
+  if (dbTypeCache.has(databaseId)) return dbTypeCache.get(databaseId);
+  try {
+    const data = await withRelogin(() => metabaseFetch(`/api/database/${databaseId}/metadata`));
+    const tables = new Set((data.tables || []).map(t => t.name.toLowerCase().replace(/[_\s]/g, '')));
+    const isContent = CONTENT_COLLECTIONS.some(c => tables.has(c.toLowerCase()));
+    const type = isContent ? 'content' : 'message';
+    dbTypeCache.set(databaseId, type);
+    return type;
+  } catch {
+    return 'message';
+  }
+}
+
 // MongoDB errors that mean the database server is briefly unavailable (failover,
 // a replica set member recovering, network blips). These are worth retrying.
 const TRANSIENT_MONGO_ERROR = /NotPrimaryOrSecondary|node is recovering|NotWritablePrimary|NotMaster|PrimarySteppedDown|InterruptedDueToReplStateChange|HostUnreachable|SocketException|connection .*(closed|reset)/i;
@@ -238,6 +256,49 @@ async function runProcessStatusQuery(databaseId, collection, match) {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Loads all 5 content collections: MoveWorkspace first, then the 4 file/folder ones.
+async function loadContentDatabaseStatus(name, databaseId) {
+  async function queryContent(collection) {
+    try {
+      return { collection, rows: await runProcessStatusQuery(databaseId, collection, null) };
+    } catch (err) {
+      console.error(`Content query failed for ${name}.${collection}:`, err.message);
+      return { collection, error: friendlyError(err) };
+    }
+  }
+
+  const [moveWorkspace, filefolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks] =
+    await Promise.all([
+      queryContent('MoveWorkspace'),
+      queryContent('FilefolderInfo'),
+      queryContent('FolderMetadataInfo'),
+      queryContent('CollaborationDetails'),
+      queryContent('Hyperlinks'),
+    ]);
+
+  // If every query failed with the same error the DB server is likely down
+  const all = [moveWorkspace, filefolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks];
+  const errors = all.map(c => c.error);
+  if (errors.every(e => e) && new Set(errors).size === 1) {
+    return { database: name, dbType: 'content', error: errors[0] };
+  }
+
+  let combinations = [];
+  try {
+    combinations = await findCombinations(databaseId, null, 'MoveWorkspace');
+  } catch (err) {
+    console.error(`Combination lookup failed for ${name}:`, err.message);
+  }
+
+  return {
+    database: name,
+    dbType: 'content',
+    combinations,
+    workspace: [moveWorkspace],
+    files: [filefolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks]
+  };
+}
+
 async function loadDatabaseStatus(name) {
   let databaseId;
   try {
@@ -245,6 +306,11 @@ async function loadDatabaseStatus(name) {
   } catch (err) {
     console.error(`Lookup failed for ${name}:`, err.message);
     return { database: name, error: friendlyError(err) };
+  }
+
+  const dbType = await getDatabaseType(databaseId);
+  if (dbType === 'content') {
+    return loadContentDatabaseStatus(name, databaseId);
   }
 
   const workspaceBase = EXCLUDED_OWNER_REGEX ? { ownerEmailId: { $not: EXCLUDED_OWNER_REGEX } } : null;
@@ -310,18 +376,18 @@ async function loadDatabaseStatus(name) {
   };
 }
 
-// Source -> destination cloud pairs from MessageWorkSpace, most workspaces first.
-// Uses the same owner filter as the counts; falls back to all workspaces when
-// the filter leaves none (e.g. an internal-only test database).
-async function findCombinations(databaseId, workspaceMatch) {
+// Source -> destination cloud pairs, most items first.
+// collection is 'MessageWorkSpace' for message projects, 'MoveWorkspace' for content projects.
+// Falls back to unfiltered when the owner filter leaves no results.
+async function findCombinations(databaseId, workspaceMatch, collection = 'MessageWorkSpace') {
   const pipeline = match => [
     ...(match ? [{ $match: match }] : []),
     { $group: { _id: { from: '$fromCloudName', to: '$toCloudName' }, Count: { $sum: 1 } } },
     { $project: { _id: 0, from: '$_id.from', to: '$_id.to', Count: 1 } },
     { $sort: { Count: -1 } }
   ];
-  let rows = await runMongoQuery(databaseId, 'MessageWorkSpace', pipeline(workspaceMatch));
-  if (!rows.length && workspaceMatch) rows = await runMongoQuery(databaseId, 'MessageWorkSpace', pipeline(null));
+  let rows = await runMongoQuery(databaseId, collection, pipeline(workspaceMatch));
+  if (!rows.length && workspaceMatch) rows = await runMongoQuery(databaseId, collection, pipeline(null));
   return rows
     .filter(r => r.from || r.to)
     .map(r => ({ from: r.from, to: r.to, count: r.Count }));
