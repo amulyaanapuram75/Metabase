@@ -145,7 +145,6 @@
       color: var(--accent); background: var(--accent-bg); border: 1px solid rgba(89, 165, 255, 0.25);
     }
     .combo.more { color: var(--muted); background: transparent; border-color: var(--border); }
-    .combo.content-badge { color: #f0a05a; background: rgba(240,160,90,0.1); border-color: rgba(240,160,90,0.3); }
     .pill {
       font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
       background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums;
@@ -510,16 +509,10 @@
       const head = el('div', 'db-head');
       const title = el('div', 'db-title');
       title.appendChild(el('span', 'db-name', result.database));
-      if (result.dbType === 'content') {
-        const badge = el('span', 'combo content-badge', 'Content');
-        badge.title = 'Content migration project (MoveWorkspace + file/folder collections)';
-        title.appendChild(badge);
-      }
       const combos = result.combinations || [];
-      const itemLabel = result.dbType === 'content' ? 'items' : 'workspaces';
       for (const c of combos.slice(0, MAX_COMBOS_SHOWN)) {
         const tag = el('span', 'combo', comboLabel(c));
-        tag.title = `${c.from} → ${c.to}: ${fmt.format(c.count)} ${itemLabel}`;
+        tag.title = `${c.from} → ${c.to}: ${fmt.format(c.count)} workspaces`;
         title.appendChild(tag);
       }
       if (combos.length > MAX_COMBOS_SHOWN) {
@@ -550,15 +543,9 @@
       const filesTotal = result.files && result.files[0] && !result.files[0].error ? result.files[0] : null;
       if (filesTotal) {
         const s = stats(filesTotal.rows);
-        if (result.dbType === 'content') {
-          const pill = el('span', 'pill', `${pct(s.done, s.total)} items processed`);
-          pill.title = `Share of ${filesTotal.collection} with a PROCESSED status`;
-          right.appendChild(pill);
-        } else {
-          const pill = el('span', 'pill', `${pct(s.done, s.total)} files processed`);
-          pill.title = 'Share of MessageEachFiles with a PROCESSED status';
-          right.appendChild(pill);
-        }
+        const pill = el('span', 'pill', `${pct(s.done, s.total)} files processed`);
+        pill.title = 'Share of MessageEachFiles with a PROCESSED status';
+        right.appendChild(pill);
       }
       right.appendChild(copyButton(`Copy all statuses for ${result.database}`, () => dbText(result)));
       right.appendChild(remove);
