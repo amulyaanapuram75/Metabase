@@ -95,6 +95,7 @@ const EXCLUDED_OWNER_REGEX = EXCLUDED_OWNER_DOMAINS.length
 
 let sessionToken = null;
 let databaseList = null;
+const dbTypeCache = new Map();
 
 async function metabaseFetch(pathPart, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -142,6 +143,28 @@ async function withRelogin(fn) {
   }
 }
 
+// Detect whether a database is a Messaging, Content, or Email project by inspecting
+// its collection names via the Metabase metadata API. Result is cached per database ID.
+async function detectDatabaseType(databaseId) {
+  if (dbTypeCache.has(databaseId)) return dbTypeCache.get(databaseId);
+  let type = 'messaging';
+  try {
+    const meta = await withRelogin(() => metabaseFetch(`/api/database/${databaseId}/metadata`));
+    const names = new Set((meta.tables || []).map(t => (t.name || '').toLowerCase()));
+    if (names.has('messageworkspace')) {
+      type = 'messaging';                        // Messaging takes priority
+    } else if (names.has('emailworkspace')) {
+      type = 'email';
+    } else if (names.has('filefolderinfo') || names.has('moveworkspaces')) {
+      type = 'content';
+    }
+  } catch (err) {
+    console.error(`Type detection failed for db ${databaseId}:`, err.message);
+  }
+  dbTypeCache.set(databaseId, type);
+  return type;
+}
+
 async function getMetabaseDatabases({ refresh = false } = {}) {
   if (!databaseList || refresh) {
     const data = await withRelogin(() => metabaseFetch('/api/database'));
@@ -165,16 +188,39 @@ async function findDatabaseId(name) {
 // MongoDB errors that mean the database server is briefly unavailable (failover,
 // a replica set member recovering, network blips). These are worth retrying.
 const TRANSIENT_MONGO_ERROR = /NotPrimaryOrSecondary|node is recovering|NotWritablePrimary|NotMaster|PrimarySteppedDown|InterruptedDueToReplStateChange|HostUnreachable|SocketException|connection .*(closed|reset)/i;
+
+// MongoDB errors that mean the server cannot be reached at all — it is either
+// decommissioned, not started yet, or the port is blocked.
+const SERVER_UNREACHABLE_ERROR = /Timed out while waiting for a server|MongoSocketOpenException|Exception opening socket|ServerSelectionTimeout|connection timed out|fetch failed/i;
+
 const RETRY_DELAYS_MS = [1500, 4000];
 
+// Maximum time to wait for a single collection query before giving up
+const QUERY_TIMEOUT_MS = 50000;
+// Email file collections (emailInfo, AttachMentDetails) can be very large — allow more time
+const EMAIL_FILE_TIMEOUT_MS = 180000;
+
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Rejects after ms milliseconds with a timeout error
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Query timed out after ${ms / 1000}s`)), ms);
+    promise.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+  });
+}
 
 // Turns raw Metabase/MongoDB errors into a short message for the dashboard
 function friendlyError(err) {
   const msg = String(err?.message || err);
+  if (/Query timed out after/.test(msg)) {
+    return 'Query timed out — the collection may be very large. Try Refresh or check the migration server.';
+  }
+  if (SERVER_UNREACHABLE_ERROR.test(msg)) {
+    return 'Server may be decommissioned or not started yet. Verify the migration server is running and try Refresh.';
+  }
   if (TRANSIENT_MONGO_ERROR.test(msg)) {
-    return 'The MongoDB server for this database is temporarily unavailable (it reported "node is recovering" or a similar failover state). ' +
-      'This is a database server issue, not the dashboard. Try Refresh in a few minutes.';
+    return 'The MongoDB server for this database is temporarily unavailable. This is a database server issue, not the dashboard. Try Refresh in a few minutes.';
   }
   const short = msg.replace(/^Metabase \d+ on \/api\/dataset: /, '');
   return short.length > 300 ? short.slice(0, 300) + '…' : short;
@@ -213,10 +259,11 @@ async function runMongoQuery(databaseId, collection, pipeline) {
   return (result?.data?.rows || []).map(r => Object.fromEntries(names.map((n, i) => [n, r[i]])));
 }
 
-// IDs (as strings) of the users whose primaryEmail is not in an excluded domain
-async function findIncludedUserIds(databaseId) {
+// IDs (as strings) of the users whose email is not in an excluded domain.
+// emailField defaults to 'primaryEmail' (Messaging/Content); pass 'email' for Email databases.
+async function findIncludedUserIds(databaseId, emailField = 'primaryEmail') {
   const rows = await runMongoQuery(databaseId, 'Users', [
-    { $match: { primaryEmail: { $not: EXCLUDED_OWNER_REGEX } } },
+    { $match: { [emailField]: { $not: EXCLUDED_OWNER_REGEX } } },
     { $group: { _id: null, ids: { $push: { $toString: '$_id' } } } }
   ]);
   const ids = rows[0]?.ids || [];
@@ -238,26 +285,18 @@ async function runProcessStatusQuery(databaseId, collection, match) {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-async function loadDatabaseStatus(name) {
-  let databaseId;
-  try {
-    databaseId = await findDatabaseId(name);
-  } catch (err) {
-    console.error(`Lookup failed for ${name}:`, err.message);
-    return { database: name, error: friendlyError(err) };
-  }
-
+async function loadMessagingDatabaseStatus(name, databaseId) {
   const workspaceBase = EXCLUDED_OWNER_REGEX ? { ownerEmailId: { $not: EXCLUDED_OWNER_REGEX } } : null;
-
-  // User IDs fetched once and shared across all three MessageEachFiles queries
-  const userIdsPromise = EXCLUDED_OWNER_REGEX ? findIncludedUserIds(databaseId) : Promise.resolve(null);
+  const userIdsPromise = EXCLUDED_OWNER_REGEX
+    ? findIncludedUserIds(databaseId).catch(err => { console.error(`User lookup failed for ${name}:`, err.message); return null; })
+    : Promise.resolve(null);
 
   async function queryWS(label, dmFilter) {
     try {
       const match = dmFilter !== undefined
         ? (workspaceBase ? { ...workspaceBase, directOrGroupMessage: dmFilter } : { directOrGroupMessage: dmFilter })
         : workspaceBase;
-      return { collection: label, rows: await runProcessStatusQuery(databaseId, 'MessageWorkSpace', match) };
+      return { collection: label, rows: await withTimeout(runProcessStatusQuery(databaseId, 'MessageWorkSpace', match), QUERY_TIMEOUT_MS) };
     } catch (err) {
       console.error(`Query failed for ${name}.MessageWorkSpace (${label}):`, err.message);
       return { collection: label, error: friendlyError(err) };
@@ -271,7 +310,7 @@ async function loadDatabaseStatus(name) {
       const match = dmFilter !== undefined
         ? (base ? { ...base, directOrGroupMessage: dmFilter } : { directOrGroupMessage: dmFilter })
         : base;
-      return { collection: label, rows: await runProcessStatusQuery(databaseId, 'MessageEachFiles', match) };
+      return { collection: label, rows: await withTimeout(runProcessStatusQuery(databaseId, 'MessageEachFiles', match), QUERY_TIMEOUT_MS) };
     } catch (err) {
       console.error(`Query failed for ${name}.MessageEachFiles (${label}):`, err.message);
       return { collection: label, error: friendlyError(err) };
@@ -279,16 +318,14 @@ async function loadDatabaseStatus(name) {
   }
 
   const [wsTotal, wsChannels, wsDMs, efTotal, efChannels, efDMs] = await Promise.all([
-    queryWS('MessageWorkSpace', undefined),   // all workspaces
-    queryWS('Channels',         false),       // directOrGroupMessage = false
-    queryWS('Direct Messages',  true),        // directOrGroupMessage = true
-    queryEF('MessageEachFiles', undefined),   // all files
+    queryWS('MessageWorkSpace', undefined),
+    queryWS('Channels',         false),
+    queryWS('Direct Messages',  true),
+    queryEF('MessageEachFiles', undefined),
     queryEF('Channels',         false),
     queryEF('Direct Messages',  true),
   ]);
 
-  // If the database server itself is down every query fails the same way;
-  // show that once for the database instead of once per collection
   const allResults = [wsTotal, wsChannels, wsDMs, efTotal, efChannels, efDMs];
   const errors = allResults.map(c => c.error);
   if (errors.every(e => e) && new Set(errors).size === 1) {
@@ -297,31 +334,166 @@ async function loadDatabaseStatus(name) {
 
   let combinations = [];
   try {
-    combinations = await findCombinations(databaseId, workspaceBase);
+    combinations = await findCombinations(databaseId, 'MessageWorkSpace', workspaceBase, 'fromCloudName', 'toCloudName');
   } catch (err) {
     console.error(`Combination lookup failed for ${name}:`, err.message);
   }
 
   return {
     database: name,
+    projectType: 'messaging',
     combinations,
     workspace: [wsTotal, wsChannels, wsDMs],
-    files:     [efTotal, efChannels, efDMs]
+    files:     [efTotal, efChannels, efDMs],
   };
+}
+
+async function loadContentDatabaseStatus(name, databaseId) {
+  const workspaceBase = EXCLUDED_OWNER_REGEX ? { ownerEmailId: { $not: EXCLUDED_OWNER_REGEX } } : null;
+  const userIdsPromise = EXCLUDED_OWNER_REGEX
+    ? findIncludedUserIds(databaseId).catch(err => { console.error(`User lookup failed for ${name}:`, err.message); return null; })
+    : Promise.resolve(null);
+
+  async function querySimple(label, collection, match) {
+    try {
+      return { collection: label, rows: await withTimeout(runProcessStatusQuery(databaseId, collection, match), QUERY_TIMEOUT_MS) };
+    } catch (err) {
+      console.error(`Query failed for ${name}.${collection}:`, err.message);
+      return { collection: label, error: friendlyError(err) };
+    }
+  }
+
+  async function queryByUserId(label, collection) {
+    try {
+      const ids = await userIdsPromise;
+      const match = ids ? { userId: { $in: ids } } : null;
+      return { collection: label, rows: await withTimeout(runProcessStatusQuery(databaseId, collection, match), QUERY_TIMEOUT_MS) };
+    } catch (err) {
+      console.error(`Query failed for ${name}.${collection}:`, err.message);
+      return { collection: label, error: friendlyError(err) };
+    }
+  }
+
+  const [moveWS, fileFolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks] = await Promise.all([
+    querySimple('MoveWorkSpaces',        'MoveWorkSpaces',        workspaceBase),
+    queryByUserId('FileFolderInfo',       'FileFolderInfo'),
+    queryByUserId('FolderMetadataInfo',   'FolderMetadataInfo'),
+    querySimple('CollabarationDetails',  'CollabarationDetails',  null),
+    querySimple('HyperLinks',            'HyperLinks',            null),
+  ]);
+
+  const allResults = [moveWS, fileFolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks];
+  const errors = allResults.map(c => c.error);
+  if (errors.every(e => e) && new Set(errors).size === 1) {
+    return { database: name, error: errors[0] };
+  }
+
+  let combinations = [];
+  try {
+    combinations = await findCombinations(databaseId, 'MoveWorkSpaces', workspaceBase, 'fromCloudName', 'toCloudName');
+  } catch (err) {
+    console.error(`Combination lookup failed for ${name}:`, err.message);
+  }
+
+  return {
+    database: name,
+    projectType: 'content',
+    combinations,
+    workspace: [moveWS],
+    files:     [fileFolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks],
+  };
+}
+
+async function loadEmailDatabaseStatus(name, databaseId) {
+  const workspaceBase = EXCLUDED_OWNER_REGEX ? { ownerEmailId: { $not: EXCLUDED_OWNER_REGEX } } : null;
+
+  // Collect the _id values of non-internal workspaces so we can filter
+  // emailInfo and AttachMentDetails by emailWorkSpaceId (much smaller than userId $in)
+  const wsIdsPromise = EXCLUDED_OWNER_REGEX
+    ? runMongoQuery(databaseId, 'emailWorkSpace', [
+        ...(workspaceBase ? [{ $match: workspaceBase }] : []),
+        { $group: { _id: null, ids: { $push: { $toString: '$_id' } } } }
+      ]).then(rows => {
+        const ids = rows[0]?.ids || [];
+        return typeof ids === 'string' ? JSON.parse(ids) : ids;
+      }).catch(err => { console.error(`Workspace ID lookup failed for ${name}:`, err.message); return null; })
+    : Promise.resolve(null);
+
+  async function queryCollection(label, collection, match, timeoutMs = QUERY_TIMEOUT_MS) {
+    try {
+      return { collection: label, rows: await withTimeout(runProcessStatusQuery(databaseId, collection, match), timeoutMs) };
+    } catch (err) {
+      console.error(`Query failed for ${name}.${collection}:`, err.message);
+      return { collection: label, error: friendlyError(err) };
+    }
+  }
+
+  async function queryByWorkspaceId(label, collection) {
+    try {
+      const wsIds = await wsIdsPromise;
+      const match = wsIds?.length ? { emailWorkSpaceId: { $in: wsIds } } : null;
+      return { collection: label, rows: await withTimeout(runProcessStatusQuery(databaseId, collection, match), EMAIL_FILE_TIMEOUT_MS) };
+    } catch (err) {
+      console.error(`Query failed for ${name}.${collection}:`, err.message);
+      return { collection: label, error: friendlyError(err) };
+    }
+  }
+
+  // Run emailWorkSpace first (fast), then emailInfo and AttachMentDetails sequentially.
+  // AttachMentDetails uses no filter — a plain $group scan is faster than a
+  // non-indexed $in match on a very large collection.
+  const emailWS = await queryCollection('Email Workspace', 'emailWorkSpace', workspaceBase);
+  const emailInfo = await queryByWorkspaceId('Email Info', 'emailInfo');
+  const attachmentDetails = await queryCollection('Attachment Details', 'AttachMentDetails', null, EMAIL_FILE_TIMEOUT_MS);
+
+  const allResults = [emailWS, emailInfo, attachmentDetails];
+  const errors = allResults.map(c => c.error);
+  if (errors.every(e => e) && new Set(errors).size === 1) {
+    return { database: name, error: errors[0] };
+  }
+
+  let combinations = [];
+  try {
+    combinations = await findCombinations(databaseId, 'emailWorkSpace', workspaceBase, 'fromCloud', 'toCloud');
+  } catch (err) {
+    console.error(`Combination lookup failed for ${name}:`, err.message);
+  }
+
+  return {
+    database: name,
+    projectType: 'email',
+    combinations,
+    workspace: [emailWS],
+    files:     [emailInfo, attachmentDetails],
+  };
+}
+
+async function loadDatabaseStatus(name) {
+  let databaseId;
+  try {
+    databaseId = await findDatabaseId(name);
+  } catch (err) {
+    console.error(`Lookup failed for ${name}:`, err.message);
+    return { database: name, error: friendlyError(err) };
+  }
+  const type = await detectDatabaseType(databaseId);
+  if (type === 'content') return loadContentDatabaseStatus(name, databaseId);
+  if (type === 'email')   return loadEmailDatabaseStatus(name, databaseId);
+  return loadMessagingDatabaseStatus(name, databaseId);
 }
 
 // Source -> destination cloud pairs from MessageWorkSpace, most workspaces first.
 // Uses the same owner filter as the counts; falls back to all workspaces when
 // the filter leaves none (e.g. an internal-only test database).
-async function findCombinations(databaseId, workspaceMatch) {
+async function findCombinations(databaseId, collection, workspaceMatch, fromField = 'fromCloudName', toField = 'toCloudName') {
   const pipeline = match => [
     ...(match ? [{ $match: match }] : []),
-    { $group: { _id: { from: '$fromCloudName', to: '$toCloudName' }, Count: { $sum: 1 } } },
+    { $group: { _id: { from: `$${fromField}`, to: `$${toField}` }, Count: { $sum: 1 } } },
     { $project: { _id: 0, from: '$_id.from', to: '$_id.to', Count: 1 } },
     { $sort: { Count: -1 } }
   ];
-  let rows = await runMongoQuery(databaseId, 'MessageWorkSpace', pipeline(workspaceMatch));
-  if (!rows.length && workspaceMatch) rows = await runMongoQuery(databaseId, 'MessageWorkSpace', pipeline(null));
+  let rows = await runMongoQuery(databaseId, collection, pipeline(workspaceMatch));
+  if (!rows.length && workspaceMatch) rows = await runMongoQuery(databaseId, collection, pipeline(null));
   return rows
     .filter(r => r.from || r.to)
     .map(r => ({ from: r.from, to: r.to, count: r.Count }));

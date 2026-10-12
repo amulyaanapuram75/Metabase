@@ -6,8 +6,27 @@
 
 const fmt = new Intl.NumberFormat('en-US');
 
-const WS_COLLECTIONS = ['MessageWorkSpace', 'Channels', 'Direct Messages'];
-const EF_COLLECTIONS = ['MessageEachFiles', 'Channels', 'Direct Messages'];
+const TYPE_COLLECTIONS = {
+  messaging: {
+    workspace:        ['MessageWorkSpace', 'Channels', 'Direct Messages'],
+    files:            ['MessageEachFiles', 'Channels', 'Direct Messages'],
+    summaryWorkspace: 'MessageWorkSpace',
+    summaryFiles:     'MessageEachFiles',
+  },
+  content: {
+    workspace:        ['MoveWorkSpaces'],
+    files:            ['FileFolderInfo', 'FolderMetadataInfo', 'CollabarationDetails', 'HyperLinks'],
+    summaryWorkspace: 'MoveWorkSpaces',
+    summaryFiles:     'FileFolderInfo',
+  },
+  email: {
+    workspace:        ['Email Workspace'],
+    files:            ['Email Info', 'Attachment Details'],
+    summaryWorkspace: 'Email Workspace',
+    summaryFiles:     'Email Info',
+  },
+};
+const typeConfig = type => TYPE_COLLECTIONS[type] || TYPE_COLLECTIONS.messaging;
 
 // Only Microsoft webhook hosts are accepted, so a saved URL can't be used to
 // make the server call arbitrary addresses
@@ -130,25 +149,27 @@ function collectionRow(arr, names) {
   return { type: 'ColumnSet', spacing: 'Medium', columns: cols };
 }
 
-// One database per block: workspace row (WS | Channels | DMs) then files row
+// One database per block: workspace row then files row, using per-type collection names
 function databaseBlock(r) {
+  const cfg = typeConfig(r.projectType);
   const items = [];
   const combos = (r.combinations || []).map(comboLabel);
   items.push(text([r.database, ...combos].join(' · '), { weight: 'Bolder', size: 'Medium' }));
   if (r.error) {
     items.push(text(r.error, { size: 'Small', color: 'Attention', spacing: 'Small' }));
   } else {
-    items.push(collectionRow(r.workspace || [], WS_COLLECTIONS));
-    items.push({ ...collectionRow(r.files || [], EF_COLLECTIONS), separator: true, spacing: 'Medium' });
+    items.push(collectionRow(r.workspace || [], cfg.workspace));
+    items.push({ ...collectionRow(r.files || [], cfg.files), separator: true, spacing: 'Medium' });
   }
   return { type: 'Container', separator: true, spacing: 'Large', items };
 }
 
 // Project totals across its databases: database count, workspace and files totals
 function projectSummary(results) {
+  const cfg = typeConfig(results.find(r => r.projectType)?.projectType);
   const summaryDefs = [
-    { name: 'MessageWorkSpace', get: r => r.workspace && r.workspace[0] },
-    { name: 'MessageEachFiles', get: r => r.files && r.files[0] },
+    { name: cfg.summaryWorkspace, get: r => r.workspace && r.workspace[0] },
+    { name: cfg.summaryFiles,     get: r => r.files && r.files[0] },
   ];
   const merged = summaryDefs.map(({ name, get }) => {
     const m = new Map();

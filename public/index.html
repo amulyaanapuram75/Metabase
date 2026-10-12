@@ -149,7 +149,7 @@
       font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
       background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums;
     }
-    .colls { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+    .colls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
     .colls + .colls { border-top: 1px solid var(--border); }
     .coll { padding: 14px 20px 16px; min-width: 0; }
     .coll + .coll { border-left: 1px solid var(--border); }
@@ -220,7 +220,7 @@
     <header>
       <div>
         <h1>Migration Status</h1>
-        <div class="sub">ProcessStatus counts from MessageEachFiles and MessageWorkSpace<span id="excluded"></span></div>
+        <div class="sub">ProcessStatus counts by migration collection<span id="excluded"></span></div>
       </div>
       <div class="controls">
         <span class="updated" id="updated"></span>
@@ -364,9 +364,13 @@
       const subtitle = [combos.join(', '), `${dbResults.length} database${dbResults.length === 1 ? '' : 's'}`, when]
         .filter(Boolean).join(' · ');
 
+      // Derive summary collection names from actual data (works for all project types)
+      const firstResult = dbResults.find(r => !r.error) || dbResults[0] || {};
       const summaryDefs = [
-        { name: 'MessageWorkSpace', get: r => r.workspace && r.workspace[0] },
-        { name: 'MessageEachFiles', get: r => r.files && r.files[0] },
+        { name: (firstResult.workspace && firstResult.workspace[0] && firstResult.workspace[0].collection) || 'Workspace',
+          get: r => r.workspace && r.workspace[0] },
+        { name: (firstResult.files && firstResult.files[0] && firstResult.files[0].collection) || 'Files',
+          get: r => r.files && r.files[0] },
       ];
       const totals = summaryDefs.map(({ name, get }) => {
         const m = new Map();
@@ -384,9 +388,6 @@
       let html = `<p><b>${escapeHtml(title)}</b><br>${escapeHtml(subtitle)}<br>${summary.map(escapeHtml).join('<br>')}</p>`;
       const lines = [title, subtitle, ...summary];
 
-      const wsNames = ['MessageWorkSpace', 'Channels', 'Direct Messages'];
-      const efNames = ['MessageEachFiles', 'Channels', 'Direct Messages'];
-
       for (const r of dbResults) {
         const heading = [r.database, ...(r.combinations || []).map(comboLabel)].join(' · ');
         html += `<p><b>${escapeHtml(heading)}</b></p>`;
@@ -396,6 +397,9 @@
           lines.push(r.error);
           continue;
         }
+        // Derive column names from actual collection data for this result
+        const wsNames = (r.workspace || []).map(c => c.collection);
+        const efNames = (r.files || []).map(c => c.collection);
         for (const [arr, names] of [[r.workspace || [], wsNames], [r.files || [], efNames]]) {
           const cols = names.map((name, i) => {
             const c = arr[i];
@@ -543,8 +547,8 @@
       const filesTotal = result.files && result.files[0] && !result.files[0].error ? result.files[0] : null;
       if (filesTotal) {
         const s = stats(filesTotal.rows);
-        const pill = el('span', 'pill', `${pct(s.done, s.total)} files processed`);
-        pill.title = 'Share of MessageEachFiles with a PROCESSED status';
+        const pill = el('span', 'pill', `${pct(s.done, s.total)} processed`);
+        pill.title = `Share of ${filesTotal.collection} with a PROCESSED status`;
         right.appendChild(pill);
       }
       right.appendChild(copyButton(`Copy all statuses for ${result.database}`, () => dbText(result)));
