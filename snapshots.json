@@ -1,0 +1,513 @@
+{
+  "wavelynx": {
+    "timestamp": 1792604981293,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 8,
+        "IN_PROGRESS": 10,
+        "NOT_PROCESSED": 1,
+        "PROCESSED": 28,
+        "PROCESSED_WITH_SOME_CONFLICTS": 33
+      },
+      "Channels": {
+        "CONFLICT": 9354,
+        "NOT_PROCESSED": 42,
+        "PROCESSED": 20644,
+        "REPLIES_CONFLICT": 1579,
+        "REPLIES_NOT_PROCESSED": 19
+      },
+      "Direct Messages": {
+        "CONFLICT": 59,
+        "IN_PROGRESS": 1,
+        "PROCESSED": 2626,
+        "REPLIES_NOT_PROCESSED": 2
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 9413,
+        "IN_PROGRESS": 1,
+        "NOT_PROCESSED": 42,
+        "PROCESSED": 23270,
+        "REPLIES_CONFLICT": 1579,
+        "REPLIES_NOT_PROCESSED": 21
+      }
+    }
+  },
+  "ajg-SDB": {
+    "timestamp": 1793719013636,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 4,
+        "NO_MESSAGE": 16,
+        "PAUSE": 6,
+        "PROCESSED": 148,
+        "PROCESSED_WITH_SOME_CONFLICTS": 218,
+        "SUSPENDED": 3
+      },
+      "Channels": {
+        "CONFLICT": 160520,
+        "NOT_PROCESSED": 689,
+        "PROCESSED": 314578,
+        "REPLIES_CONFLICT": 48220,
+        "REPLIES_NOT_PROCESSED": 2147
+      },
+      "Direct Messages": {
+        "CONFLICT": 6,
+        "PROCESSED": 3023
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 160526,
+        "NOT_PROCESSED": 689,
+        "PROCESSED": 317601,
+        "REPLIES_CONFLICT": 48220,
+        "REPLIES_NOT_PROCESSED": 2147
+      }
+    }
+  },
+  "crossreach": {
+    "timestamp": 1792089570477,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 1,
+        "IN_PROGRESS": 2,
+        "NO_MESSAGE": 378,
+        "PROCESSED": 216,
+        "PROCESSED_WITH_SOME_CONFLICTS": 31
+      },
+      "Channels": {
+        "CONFLICT": 1085,
+        "PROCESSED": 1736,
+        "REACTION_NOT_PROCESSED": 68,
+        "REPLIES_CONFLICT": 443
+      },
+      "Direct Messages": {},
+      "MessageEachFiles": {
+        "CONFLICT": 1085,
+        "PROCESSED": 1736,
+        "REACTION_NOT_PROCESSED": 68,
+        "REPLIES_CONFLICT": 443
+      }
+    }
+  },
+  "ffadvisor-SDB": {
+    "timestamp": 1793698484269,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 1907,
+        "IN_PROGRESS": 1,
+        "NO_MESSAGE": 1067,
+        "PROCESSED": 2344,
+        "PROCESSED_WITH_SOME_CONFLICTS": 2634
+      },
+      "Channels": {
+        "CONFLICT": 11718,
+        "PROCESSED": 40338,
+        "REACTION_NOT_PROCESSED": 468,
+        "REPLIES_CONFLICT": 2658
+      },
+      "Direct Messages": {
+        "CONFLICT": 147254,
+        "NOT_PROCESSED": 1,
+        "PROCESSED": 361575,
+        "REACTION_NOT_PROCESSED": 20,
+        "REPLIES_CONFLICT": 76
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 158972,
+        "NOT_PROCESSED": 1,
+        "PROCESSED": 401913,
+        "REACTION_NOT_PROCESSED": 488,
+        "REPLIES_CONFLICT": 2734
+      }
+    }
+  },
+  "technicaltoolboxes-SDB": {
+    "timestamp": 1793698483381,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 1014,
+        "IN_PROGRESS": 1,
+        "NO_MESSAGE": 701,
+        "PROCESSED": 1479,
+        "PROCESSED_WITH_SOME_CONFLICTS": 23
+      },
+      "Channels": {
+        "CONFLICT": 725,
+        "NOT_PROCESSED": 3294,
+        "PROCESSED": 22,
+        "REPLIES_CONFLICT": 860,
+        "REPLIES_NOT_PROCESSED": 6704
+      },
+      "Direct Messages": {
+        "CONFLICT": 1790,
+        "FINISH_CHUNK": 1,
+        "PROCESSED": 309647
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 2515,
+        "FINISH_CHUNK": 1,
+        "NOT_PROCESSED": 3294,
+        "PROCESSED": 309669,
+        "REPLIES_CONFLICT": 860,
+        "REPLIES_NOT_PROCESSED": 6704
+      }
+    }
+  },
+  "podean-SDB": {
+    "timestamp": 1793698487015,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 42,
+        "IN_PROGRESS": 1297,
+        "NOT_PROCESSED": 2,
+        "NO_MESSAGE": 249,
+        "PROCESSED": 1109,
+        "PROCESSED_WITH_SOME_CONFLICTS": 242
+      },
+      "Channels": {
+        "CONFLICT": 25296,
+        "IN_PROGRESS": 1,
+        "NOT_PROCESSED": 265061,
+        "PROCESSED": 170007,
+        "REPLIES_CONFLICT": 993,
+        "REPLIES_NOT_PROCESSED": 1425
+      },
+      "Direct Messages": {
+        "CONFLICT": 1331,
+        "IN_PROGRESS": 7,
+        "NOT_PROCESSED": 946154,
+        "PROCESSED": 1284068,
+        "REPLIES_CONFLICT": 14,
+        "REPLIES_NOT_PROCESSED": 10606
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 26627,
+        "IN_PROGRESS": 7,
+        "NOT_PROCESSED": 1211232,
+        "PROCESSED": 1454058,
+        "REPLIES_CONFLICT": 1007,
+        "REPLIES_NOT_PROCESSED": 12031
+      }
+    }
+  },
+  "ajg4": {
+    "timestamp": 1793719014015,
+    "collections": {
+      "MessageWorkSpace": {
+        "CANCEL": 22,
+        "CONFLICT": 24,
+        "NO_MESSAGE": 275,
+        "PROCESSED": 662,
+        "PROCESSED_WITH_SOME_CONFLICTS": 664,
+        "SUSPENDED": 2
+      },
+      "Channels": {
+        "CONFLICT": 107988,
+        "PROCESSED": 650222,
+        "REPLIES_CONFLICT": 69887
+      },
+      "Direct Messages": {},
+      "MessageEachFiles": {
+        "CONFLICT": 107988,
+        "PROCESSED": 650222,
+        "REPLIES_CONFLICT": 69887
+      }
+    }
+  },
+  "estee4": {
+    "timestamp": 1793698496288,
+    "collections": {
+      "MoveWorkSpaces": {
+        "CANCEL": 1,
+        "IN_PROGRESS": 2,
+        "PROCESSED": 31,
+        "PROCESSED_WITH_SOME_CONFLICTS": 22,
+        "SUSPENDED": 13
+      },
+      "FileFolderInfo": {
+        "CANCEL": 2347,
+        "CONFLICT": 5059,
+        "MANUAL_FILE_RETRY": 5654,
+        "NOT_PROCESSED": 20,
+        "PROCESSED": 982908,
+        "VERSION_CONFLICT": 647,
+        "VERSION_NOT_PROCESSED": 1133,
+        "VERSION_PROCESSED": 230330
+      },
+      "FolderMetadataInfo": {
+        "PROCESSED": 139723
+      },
+      "CollabarationDetails": {
+        "CONFLICT": 228,
+        "IN_QUEUE": 2023,
+        "PAUSE": 797387,
+        "PROCESSED": 187442
+      },
+      "HyperLinks": {
+        "CONFLICT": 2525,
+        "NOT_STARTED": 1101,
+        "PROCESSED": 294977
+      }
+    }
+  },
+  "morrisanimal": {
+    "timestamp": 1792604984020,
+    "collections": {
+      "MessageWorkSpace": {
+        "CANCEL": 8,
+        "CONFLICT": 3735,
+        "NO_MESSAGE": 2430,
+        "PROCESSED": 3213,
+        "PROCESSED_WITH_SOME_CONFLICTS": 937,
+        "SUSPENDED": 6
+      },
+      "Channels": {
+        "CONFLICT": 232,
+        "NOT_PROCESSED": 67349,
+        "PROCESSED": 286658,
+        "REPLIES_CONFLICT": 74,
+        "REPLIES_NOT_PROCESSED": 18220
+      },
+      "Direct Messages": {
+        "CONFLICT": 29765,
+        "PROCESSED": 1222134,
+        "SUSPENDED": 14743
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 29997,
+        "NOT_PROCESSED": 67349,
+        "PROCESSED": 1508792,
+        "REPLIES_CONFLICT": 74,
+        "REPLIES_NOT_PROCESSED": 18220,
+        "SUSPENDED": 14743
+      }
+    }
+  },
+  "estee3": {
+    "timestamp": 1793698500032,
+    "collections": {
+      "MoveWorkSpaces": {
+        "IN_PROGRESS": 3,
+        "PROCESSED": 29,
+        "PROCESSED_WITH_SOME_CONFLICTS": 17,
+        "SUSPENDED": 14
+      },
+      "FileFolderInfo": {
+        "CANCEL": 1094,
+        "CONFLICT": 664,
+        "MANUAL_FILE_RETRY": 19,
+        "NOT_PROCESSED": 8410,
+        "PROCESSED": 1601898,
+        "VERSION_CONFLICT": 1531,
+        "VERSION_NOT_PROCESSED": 250,
+        "VERSION_PROCESSED": 195686
+      },
+      "FolderMetadataInfo": {
+        "CONFLICT": 1,
+        "MANUAL_FOLDER_RETRY": 5,
+        "NOT_PROCESSED": 470,
+        "PAUSE": 1,
+        "PROCESSED": 208710
+      },
+      "CollabarationDetails": {
+        "CONFLICT": 397,
+        "IN_QUEUE": 21601,
+        "NOT_PROCESSED": 70,
+        "PAUSE": 1345252,
+        "PROCESSED": 247233
+      },
+      "HyperLinks": {
+        "CONFLICT": 15188,
+        "NOT_STARTED": 615,
+        "NOT_STARTED_LARGE": 18,
+        "NOT_STARTED_MEDIUM": 157,
+        "PAUSE": 946,
+        "PROCESSED": 886682
+      }
+    }
+  },
+  "ajg3-SDB": {
+    "timestamp": 1793719017924,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 6698,
+        "IN_PROGRESS": 1665,
+        "NOT_PROCESSED": 1,
+        "NO_MESSAGE": 313,
+        "PROCESSED": 9384,
+        "PROCESSED_WITH_SOME_CONFLICTS": 4123,
+        "SUSPENDED": 385
+      },
+      "Channels": {
+        "PROCESSED": 83
+      },
+      "Direct Messages": {
+        "CONFLICT": 195350,
+        "NOT_PROCESSED": 1345,
+        "PROCESSED": 2569459
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 195350,
+        "NOT_PROCESSED": 1345,
+        "PROCESSED": 2569542
+      }
+    }
+  },
+  "ajg2-SDB": {
+    "timestamp": 1793719021975,
+    "collections": {
+      "MessageWorkSpace": {
+        "CONFLICT": 12743,
+        "IN_PROGRESS": 4487,
+        "NO_MESSAGE": 445,
+        "PROCESSED": 21034,
+        "PROCESSED_WITH_SOME_CONFLICTS": 7869,
+        "SUSPENDED": 95
+      },
+      "Channels": {
+        "PROCESSED": 21
+      },
+      "Direct Messages": {
+        "CONFLICT": 113488,
+        "IN_PROGRESS": 3,
+        "NOT_PROCESSED": 3790,
+        "PROCESSED": 3904584
+      },
+      "MessageEachFiles": {
+        "CONFLICT": 113488,
+        "IN_PROGRESS": 3,
+        "NOT_PROCESSED": 3790,
+        "PROCESSED": 3904605
+      }
+    }
+  },
+  "estee2": {
+    "timestamp": 1793698497443,
+    "collections": {
+      "MoveWorkSpaces": {
+        "CANCEL": 23,
+        "IN_PROGRESS": 4,
+        "PROCESSED": 1714,
+        "PROCESSED_WITH_SOME_CONFLICTS": 192,
+        "SUSPENDED": 83
+      },
+      "FileFolderInfo": {
+        "CONFLICT": 94295,
+        "MANUAL_FILE_RETRY": 11105,
+        "NOT_PROCESSED": 61520,
+        "PROCESSED": 1975510,
+        "VERSION_CONFLICT": 1761,
+        "VERSION_NOT_PROCESSED": 19486,
+        "VERSION_PROCESSED": 281895
+      },
+      "FolderMetadataInfo": {
+        "CONFLICT": 4965,
+        "MANUAL_FOLDER_RETRY": 1191,
+        "PROCESSED": 306749
+      },
+      "CollabarationDetails": {
+        "CONFLICT": 849,
+        "IN_QUEUE": 116114,
+        "NOT_PROCESSED": 1459,
+        "PAUSE": 1240883,
+        "PROCESSED": 629850,
+        "SUSPENDED": 65
+      },
+      "HyperLinks": {
+        "CANCEL": 26,
+        "CONFLICT": 17077,
+        "NOT_PROCESSED": 1,
+        "NOT_STARTED": 23694,
+        "NOT_STARTED_LARGE": 750,
+        "NOT_STARTED_MEDIUM": 436,
+        "PAUSE": 78,
+        "PROCESSED": 767911
+      }
+    }
+  },
+  "estee": {
+    "timestamp": 1793698528607,
+    "collections": {
+      "MoveWorkSpaces": {
+        "CANCEL": 4,
+        "IN_PROGRESS": 5,
+        "NOT_PROCESSED": 2,
+        "PROCESSED": 1187,
+        "PROCESSED_WITH_SOME_CONFLICTS": 150,
+        "SUSPENDED": 10
+      },
+      "FileFolderInfo": {
+        "CONFLICT": 83085,
+        "MANUAL_FILE_RETRY": 570,
+        "PROCESSED": 3452765,
+        "VERSION_CONFLICT": 3217,
+        "VERSION_NOT_PROCESSED": 4660,
+        "VERSION_PROCESSED": 169818
+      },
+      "FolderMetadataInfo": {
+        "CONFLICT": 1750,
+        "MANUAL_FOLDER_RETRY": 2,
+        "PAUSE": 1,
+        "PROCESSED": 580071
+      },
+      "CollabarationDetails": {
+        "CONFLICT": 1215,
+        "IN_QUEUE": 6001,
+        "NOT_PROCESSED": 4,
+        "PAUSE": 2182412,
+        "PROCESSED": 1274707
+      },
+      "HyperLinks": {
+        "CONFLICT": 8751,
+        "IN_PROGRESS": 1,
+        "NOT_PROCESSED": 1,
+        "NOT_STARTED": 506,
+        "NOT_STARTED_LARGE": 4874,
+        "PAUSE": 33,
+        "PROCESSED": 1595111
+      }
+    }
+  },
+  "estee5": {
+    "timestamp": 1793698527928,
+    "collections": {
+      "MoveWorkSpaces": {
+        "CANCEL": 1,
+        "PROCESSED": 45,
+        "PROCESSED_WITH_SOME_CONFLICTS": 29,
+        "SUSPENDED": 19
+      },
+      "FileFolderInfo": {
+        "CONFLICT": 94929,
+        "MANUAL_FILE_RETRY": 1523,
+        "NOT_PROCESSED": 73979,
+        "PAUSE": 812103,
+        "PROCESSED": 3754260,
+        "VERSION_CONFLICT": 88842,
+        "VERSION_NOT_PROCESSED": 546843,
+        "VERSION_PROCESSED": 809951
+      },
+      "FolderMetadataInfo": {
+        "CONFLICT": 501,
+        "MANUAL_FOLDER_RETRY": 152,
+        "NOT_PROCESSED": 4933,
+        "PROCESSED": 847964,
+        "SUSPENDED": 3234
+      },
+      "CollabarationDetails": {
+        "CONFLICT": 1024,
+        "IN_QUEUE": 240687,
+        "NOT_PROCESSED": 32004,
+        "PAUSE": 2840055,
+        "PROCESSED": 670115
+      },
+      "HyperLinks": {
+        "CONFLICT": 17913,
+        "NOT_STARTED": 213836,
+        "NOT_STARTED_LARGE": 1893,
+        "NOT_STARTED_MEDIUM": 61,
+        "PAUSE": 1778,
+        "PROCESSED": 1196194
+      }
+    }
+  }
+}
