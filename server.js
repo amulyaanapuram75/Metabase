@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const session = require('express-session');
+const msal = require('@azure/msal-node');
 const fs = require('fs');
 const path = require('path');
 const teams = require('./teams');
@@ -10,6 +12,28 @@ const PORT = process.env.PORT || 3000;
 const METABASE_URL = (process.env.METABASE_URL || 'https://mb.syncfuze.com').replace(/\/$/, '');
 const METABASE_USER = process.env.METABASE_USER;
 const METABASE_PASS = process.env.METABASE_PASS;
+
+// ---- Microsoft SSO ----
+const AZURE_CLIENT_ID     = process.env.AZURE_CLIENT_ID;
+const AZURE_TENANT_ID     = process.env.AZURE_TENANT_ID || 'common';
+const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET;
+const AZURE_REDIRECT_URI  = process.env.AZURE_REDIRECT_URI || `http://localhost:${PORT}/auth/callback`;
+const SESSION_SECRET       = process.env.SESSION_SECRET || 'change-me-please';
+const ALLOWED_DOMAIN       = (process.env.ALLOWED_EMAIL_DOMAIN || 'cloudfuze.com').toLowerCase();
+
+const msalApp = AZURE_CLIENT_ID && AZURE_CLIENT_SECRET
+  ? new msal.ConfidentialClientApplication({
+      auth: {
+        clientId: AZURE_CLIENT_ID,
+        authority: `https://login.microsoftonline.com/${AZURE_TENANT_ID}`,
+        clientSecret: AZURE_CLIENT_SECRET,
+      }
+    })
+  : null;
+
+if (!msalApp) {
+  console.warn('AZURE_CLIENT_ID / AZURE_CLIENT_SECRET not set — SSO is disabled, dashboard is open to all.');
+}
 
 // The databases shown on the dashboard are managed from the UI and saved here.
 // On first run the list is seeded from METABASE_DATABASE_NAME (comma-separated).
@@ -364,6 +388,73 @@ async function runProcessStatusQuery(databaseId, collection, match) {
   const rows = await runMongoQuery(databaseId, collection, pipeline);
   return rows.map(r => [r.ProcessStatus, r.Count]);
 }
+
+// ---- Session ----
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, secure: false, maxAge: 8 * 60 * 60 * 1000 } // 8 hours
+}));
+
+// ---- Auth routes (no auth required on these) ----
+app.get('/auth/login', async (req, res) => {
+  if (!msalApp) return res.redirect('/');
+  try {
+    const url = await msalApp.getAuthCodeUrl({
+      scopes: ['openid', 'profile', 'email'],
+      redirectUri: AZURE_REDIRECT_URI,
+    });
+    res.redirect(url);
+  } catch (err) {
+    res.redirect(`/login.html?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+app.get('/auth/callback', async (req, res) => {
+  const { code, error, error_description } = req.query;
+  if (error) {
+    console.error('Azure OAuth error:', error, error_description);
+    const msg = error_description || error;
+    return res.redirect(`/login.html?error=${encodeURIComponent(msg)}`);
+  }
+  try {
+    const result = await msalApp.acquireTokenByCode({
+      code,
+      scopes: ['openid', 'profile', 'email'],
+      redirectUri: AZURE_REDIRECT_URI,
+    });
+    const email = (result.account?.username || '').toLowerCase();
+    if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+      return res.redirect(`/login.html?error=${encodeURIComponent(`Access restricted to @${ALLOWED_DOMAIN} accounts.`)}`);
+    }
+    req.session.user = { name: result.account?.name || email, email };
+    res.redirect('/');
+  } catch (err) {
+    res.redirect(`/login.html?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+app.get('/auth/logout', (req, res) => {
+  req.session.destroy(() => {
+    const post = encodeURIComponent(AZURE_REDIRECT_URI.replace('/auth/callback', '/login.html'));
+    res.redirect(`https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/logout?post_logout_redirect_uri=${post}`);
+  });
+});
+
+app.get('/api/me', (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json(req.session.user);
+});
+
+// ---- Auth guard ----
+app.use((req, res, next) => {
+  if (!msalApp) return next();               // SSO not configured — open access
+  if (req.session?.user) return next();
+  if (req.path === '/login.html' || req.path.startsWith('/auth/')) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not authenticated' });
+  res.redirect('/login.html');
+});
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));

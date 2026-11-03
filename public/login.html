@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in — Migration Status</title>
+  <style>
+    :root {
+      --bg: #1a1f2b;
+      --surface: #1f2532;
+      --border: #2a303d;
+      --text: #e6e8eb;
+      --muted: #8a93a3;
+      --accent: #59a5ff;
+      --err: #ff6b6b;
+      --err-bg: rgba(255, 107, 107, 0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-font-smoothing: antialiased;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .app-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #1d4ed8 0%, #59a5ff 100%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .app-icon svg { width: 28px; height: 28px; fill: #fff; }
+    h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 8px; }
+    .subtitle { color: var(--muted); font-size: 13.5px; margin-bottom: 32px; line-height: 1.5; }
+    .ms-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 11px 20px;
+      font: 600 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #fff;
+      background: #0078d4;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .ms-btn:hover { background: #106ebe; box-shadow: 0 2px 8px rgba(0,120,212,0.35); }
+    .ms-btn:active { background: #005a9e; }
+    .ms-logo { flex: none; width: 20px; height: 20px; }
+    .error-box {
+      margin-top: 20px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--err-bg);
+      color: var(--err);
+      font-size: 13px;
+      text-align: left;
+      line-height: 1.45;
+    }
+    .footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="app-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/>
+      </svg>
+    </div>
+    <h1>Migration Status</h1>
+    <p class="subtitle">Sign in with your CloudFuze Microsoft account to access the dashboard.</p>
+    <a href="/auth/login" class="ms-btn">
+      <svg class="ms-logo" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+        <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+        <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+        <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+      </svg>
+      Sign in with Microsoft
+    </a>
+    <div id="error-box" class="error-box" hidden></div>
+    <div class="footer">Access restricted to CloudFuze employees</div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const err = params.get('error');
+    if (err) {
+      const box = document.getElementById('error-box');
+      box.textContent = err;
+      box.hidden = false;
+    }
+  </script>
+</body>
+</html>

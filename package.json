@@ -10,7 +10,9 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@azure/msal-node": "^7.1.2",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "express-session": "^1.19.0"
   }
 }

@@ -169,7 +169,7 @@
 
     .rows { list-style: none; margin: 0; padding: 0; }
     .rows li {
-      display: grid; grid-template-columns: minmax(0, 1fr) 110px 64px; align-items: center; gap: 12px;
+      display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px 64px; align-items: center; gap: 12px;
       padding: 7px 4px; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.045);
     }
     .rows li:last-child { border-bottom: 0; }
@@ -181,6 +181,8 @@
     .rows li:not(.th):hover { background: rgba(255, 255, 255, 0.025); }
     .status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .count { font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; }
+    .count.prev { color: var(--muted); font-weight: 400; }
+    .count.prev.no-data { color: var(--border); }
     .pct { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 
     .error {
@@ -207,14 +209,33 @@
     .banner { margin-bottom: 20px; }
 
 
-    /* Delta summary block */
-    .delta-block { font-size: 11.5px; text-align: right; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 4px; }
-    .delta-row { display: flex; justify-content: flex-end; gap: 8px; line-height: 1.55; }
-    .delta-label { color: var(--muted); }
-    .delta-val { font-weight: 600; min-width: 60px; text-align: right; }
-    .delta-val.pos { color: #4ade80; }
-    .delta-val.neg { color: var(--err); }
-    .delta-val.zero { color: var(--muted); }
+    /* Hourly count comparison header */
+    .count-compare {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .count-box {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+    }
+    .count-box .cb-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    }
+    .count-box .cb-val {
+      font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1;
+    }
+    .count-box.prev .cb-val { color: var(--muted); font-size: 18px; }
+    .count-arrow {
+      color: var(--border); font-size: 16px; line-height: 1; padding-top: 10px;
+    }
+    .diff-box {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-left: 6px;
+      border-left: 1px solid var(--border);
+    }
+    .diff-box .cb-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .diff-box .cb-val { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .diff-box .cb-val.pos { color: #4ade80; }
+    .diff-box .cb-val.neg { color: var(--err); }
+    .diff-box .cb-val.zero { color: var(--muted); }
+    .snap-age { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
     /* DriveChangeIdDetails table */
     .drive-changes { display:flex; flex-direction:column; gap:0; }
@@ -256,6 +277,10 @@
           <option value="10800">Every 3 hours</option>
         </select>
         <button id="refresh">Refresh</button>
+        <span id="user-info" style="display:none;align-items:center;gap:8px;">
+          <span id="user-name" style="color:var(--muted);font-size:13px;"></span>
+          <a href="/auth/logout" style="font:inherit;font-size:13px;color:var(--text);background:var(--btn);border:1px solid var(--border);border-radius:6px;padding:7px 14px;cursor:pointer;text-decoration:none;">Sign out</a>
+        </span>
       </div>
     </header>
 
@@ -277,6 +302,15 @@
   </div>
 
   <script>
+    // Show logged-in user in header
+    fetch('/api/me').then(r => r.ok ? r.json() : null).then(user => {
+      if (!user) return;
+      const info = document.getElementById('user-info');
+      const name = document.getElementById('user-name');
+      name.textContent = user.name || user.email;
+      info.style.display = 'flex';
+    }).catch(() => {});
+
     const fmt = new Intl.NumberFormat('en-US');
     const pctFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 
@@ -500,35 +534,51 @@
 
       const rows = sortRows(c.rows);
       const { total } = stats(rows);
+
       const totalGroup = el('div');
-      totalGroup.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;line-height:1.3';
-      totalGroup.appendChild(el('span', 'coll-total', fmt.format(total)));
+      totalGroup.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px';
+
       if (c.delta != null) {
         const { totalDelta, statusDeltas, snapshotAt, previousTotal } = c.delta;
         const sign = totalDelta > 0 ? '+' : '';
         const diffCls = totalDelta > 0 ? 'pos' : totalDelta < 0 ? 'neg' : 'zero';
 
-        const block = el('div', 'delta-block');
+        // Prev → Current with Difference
+        const compare = el('div', 'count-compare');
 
-        const makeRow = (label, val, cls) => {
-          const row = el('div', 'delta-row');
-          row.appendChild(el('span', 'delta-label', label));
-          row.appendChild(el('span', `delta-val${cls ? ' ' + cls : ''}`, val));
-          return row;
-        };
-        block.appendChild(makeRow('Previous count', fmt.format(previousTotal)));
-        block.appendChild(makeRow('Current count', fmt.format(total)));
-        block.appendChild(makeRow('Difference', `${sign}${fmt.format(totalDelta)}`, diffCls));
+        const prevBox = el('div', 'count-box prev');
+        prevBox.appendChild(el('span', 'cb-label', 'Prev (1hr)'));
+        prevBox.appendChild(el('span', 'cb-val', fmt.format(previousTotal)));
+        compare.appendChild(prevBox);
 
-        // tooltip shows per-status breakdown
+        compare.appendChild(el('span', 'count-arrow', '→'));
+
+        const curBox = el('div', 'count-box');
+        curBox.appendChild(el('span', 'cb-label', 'Current'));
+        curBox.appendChild(el('span', 'cb-val', fmt.format(total)));
+        compare.appendChild(curBox);
+
+        const diffBox = el('div', 'diff-box');
+        diffBox.appendChild(el('span', 'cb-label', 'Diff'));
+        diffBox.appendChild(el('span', `cb-val ${diffCls}`, `${sign}${fmt.format(totalDelta)}`));
+        compare.appendChild(diffBox);
+
+        // breakdown tooltip
         const breakdown = Object.entries(statusDeltas)
           .filter(([, d]) => d !== 0)
           .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
           .map(([s, d]) => `${s}: ${d > 0 ? '+' : ''}${fmt.format(d)}`)
           .join('\n');
-        block.title = `Snapshot taken ${snapshotAge(snapshotAt)}` + (breakdown ? '\n' + breakdown : '');
-        totalGroup.appendChild(block);
+        compare.title = `Snapshot: ${snapshotAge(snapshotAt)}` + (breakdown ? '\n' + breakdown : '');
+
+        totalGroup.appendChild(compare);
+        totalGroup.appendChild(el('span', 'snap-age', `Snapshot ${snapshotAge(snapshotAt)}`));
+      } else {
+        // No snapshot yet — just show current total
+        totalGroup.appendChild(el('span', 'coll-total', fmt.format(total)));
+        totalGroup.appendChild(el('span', 'snap-age', 'Prev count available after 1hr'));
       }
+
       head.appendChild(totalGroup);
 
       if (!rows.length) {
@@ -538,15 +588,35 @@
 
       const list = el('ul', 'rows');
       const th = el('li', 'th');
-      th.append(el('span', null, 'ProcessStatus'), el('span', null, 'Count'), el('span', null, '%'));
+      th.append(
+        el('span', null, 'ProcessStatus'),
+        el('span', null, 'Prev Count'),
+        el('span', null, 'Count'),
+        el('span', null, '%')
+      );
       list.appendChild(th);
+      const statusDeltas = c.delta?.statusDeltas || null;
       for (const [status, count] of rows) {
         const li = el('li');
         const name = el('span', 'status', status ?? '(null)');
         name.title = status ?? '(null)';
         li.appendChild(name);
-        li.appendChild(el('span', 'count', fmt.format(Number(count) || 0)));
-        li.appendChild(el('span', 'pct', pct(Number(count) || 0, total)));
+
+        const cur = Number(count) || 0;
+        const key = status ?? '(null)';
+        if (statusDeltas) {
+          const diff = statusDeltas[key] ?? 0;
+          const prev = cur - diff;
+          const prevEl = el('span', 'count prev', fmt.format(prev));
+          if (diff > 0) prevEl.title = `+${fmt.format(diff)} since snapshot`;
+          else if (diff < 0) prevEl.title = `${fmt.format(diff)} since snapshot`;
+          li.appendChild(prevEl);
+        } else {
+          li.appendChild(el('span', 'count prev no-data', '—'));
+        }
+
+        li.appendChild(el('span', 'count', fmt.format(cur)));
+        li.appendChild(el('span', 'pct', pct(cur, total)));
         list.appendChild(li);
       }
       box.appendChild(list);
