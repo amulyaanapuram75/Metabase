@@ -209,27 +209,27 @@
     .banner { margin-bottom: 20px; }
 
 
-    /* Hourly stats — shown in top-right of collection header */
+    /* Hourly stats — shown in top-right of collection header, stacked vertically */
     .coll-stats {
-      display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     }
     .stat-row {
-      display: flex; align-items: center; gap: 8px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
     }
     .stat-label {
-      font-size: 10px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.06em; color: var(--muted);
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--muted);
     }
     .stat-val {
-      font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums;
-      min-width: 54px; text-align: right;
+      font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em; line-height: 1.1;
     }
-    .stat-val.prev  { color: var(--muted); }
-    .stat-val.cur   { color: var(--text); font-size: 20px; }
+    .stat-val.prev  { color: var(--muted); font-size: 15px; }
+    .stat-val.cur   { color: var(--text); }
     .stat-val.pos   { color: #4ade80; }
     .stat-val.neg   { color: var(--err); }
     .stat-val.zero  { color: var(--muted); }
-    .stat-val.none  { color: var(--border); }
+    .stat-val.none  { color: var(--border); font-size: 13px; }
     .snap-age { font-size: 10px; color: var(--muted); }
 
     /* DriveChangeIdDetails table */
@@ -548,8 +548,8 @@
         const diffCls = totalDelta > 0 ? 'pos' : totalDelta < 0 ? 'neg' : 'zero';
         const age = snapshotAge(snapshotAt);
 
-        statsBlock.appendChild(makeStatRow('Prev (1hr)', fmt.format(previousTotal), 'prev'));
-        statsBlock.appendChild(makeStatRow('Current', fmt.format(total), 'cur'));
+        statsBlock.appendChild(makeStatRow('Previous Count', fmt.format(previousTotal), 'prev'));
+        statsBlock.appendChild(makeStatRow('Current Count', fmt.format(total), 'cur'));
         statsBlock.appendChild(makeStatRow('Diff', `${sign}${fmt.format(totalDelta)}`, diffCls));
         statsBlock.appendChild(el('span', 'snap-age', age));
 
@@ -560,8 +560,10 @@
           .join('\n');
         statsBlock.title = `Snapshot: ${age}` + (breakdown ? '\n' + breakdown : '');
       } else {
-        statsBlock.appendChild(makeStatRow('Current', fmt.format(total), 'cur'));
-        statsBlock.appendChild(el('span', 'snap-age', 'Prev count available after 1hr'));
+        statsBlock.appendChild(makeStatRow('Previous Count', '—', 'none'));
+        statsBlock.appendChild(makeStatRow('Current Count', fmt.format(total), 'cur'));
+        statsBlock.appendChild(makeStatRow('Diff', '—', 'none'));
+        statsBlock.appendChild(el('span', 'snap-age', 'Available after 1hr'));
       }
 
       head.appendChild(statsBlock);

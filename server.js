@@ -457,7 +457,13 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+  }
+}));
 
 async function loadMessagingDatabaseStatus(name, databaseId) {
   const workspaceBase = EXCLUDED_OWNER_REGEX ? { ownerEmailId: { $not: EXCLUDED_OWNER_REGEX } } : null;
