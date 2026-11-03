@@ -209,33 +209,28 @@
     .banner { margin-bottom: 20px; }
 
 
-    /* Hourly count comparison header */
-    .count-compare {
-      display: flex; align-items: center; gap: 10px;
+    /* Hourly stats — shown in top-right of collection header */
+    .coll-stats {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
     }
-    .count-box {
-      display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+    .stat-row {
+      display: flex; align-items: center; gap: 8px;
     }
-    .count-box .cb-label {
-      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    .stat-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted);
     }
-    .count-box .cb-val {
-      font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1;
+    .stat-val {
+      font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums;
+      min-width: 54px; text-align: right;
     }
-    .count-box.prev .cb-val { color: var(--muted); font-size: 18px; }
-    .count-arrow {
-      color: var(--border); font-size: 16px; line-height: 1; padding-top: 10px;
-    }
-    .diff-box {
-      display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-left: 6px;
-      border-left: 1px solid var(--border);
-    }
-    .diff-box .cb-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-    .diff-box .cb-val { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
-    .diff-box .cb-val.pos { color: #4ade80; }
-    .diff-box .cb-val.neg { color: var(--err); }
-    .diff-box .cb-val.zero { color: var(--muted); }
-    .snap-age { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .stat-val.prev  { color: var(--muted); }
+    .stat-val.cur   { color: var(--text); font-size: 20px; }
+    .stat-val.pos   { color: #4ade80; }
+    .stat-val.neg   { color: var(--err); }
+    .stat-val.zero  { color: var(--muted); }
+    .stat-val.none  { color: var(--border); }
+    .snap-age { font-size: 10px; color: var(--muted); }
 
     /* DriveChangeIdDetails table */
     .drive-changes { display:flex; flex-direction:column; gap:0; }
@@ -520,6 +515,8 @@
 
     function renderCollection(c, database) {
       const box = el('div', 'coll');
+
+      // ── Header: collection name + copy button + stats in top-right ──
       const head = el('div', 'coll-head');
       const left = el('div', 'head-group');
       left.appendChild(el('span', 'coll-name', c.collection));
@@ -535,57 +532,46 @@
       const rows = sortRows(c.rows);
       const { total } = stats(rows);
 
-      const totalGroup = el('div');
-      totalGroup.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px';
+      // Build vertical stats block for the top-right of the header
+      const makeStatRow = (label, valText, valCls) => {
+        const row = el('div', 'stat-row');
+        row.appendChild(el('span', 'stat-label', label));
+        row.appendChild(el('span', `stat-val ${valCls}`, valText));
+        return row;
+      };
+
+      const statsBlock = el('div', 'coll-stats');
 
       if (c.delta != null) {
         const { totalDelta, statusDeltas, snapshotAt, previousTotal } = c.delta;
         const sign = totalDelta > 0 ? '+' : '';
         const diffCls = totalDelta > 0 ? 'pos' : totalDelta < 0 ? 'neg' : 'zero';
+        const age = snapshotAge(snapshotAt);
 
-        // Prev → Current with Difference
-        const compare = el('div', 'count-compare');
+        statsBlock.appendChild(makeStatRow('Prev (1hr)', fmt.format(previousTotal), 'prev'));
+        statsBlock.appendChild(makeStatRow('Current', fmt.format(total), 'cur'));
+        statsBlock.appendChild(makeStatRow('Diff', `${sign}${fmt.format(totalDelta)}`, diffCls));
+        statsBlock.appendChild(el('span', 'snap-age', age));
 
-        const prevBox = el('div', 'count-box prev');
-        prevBox.appendChild(el('span', 'cb-label', 'Prev (1hr)'));
-        prevBox.appendChild(el('span', 'cb-val', fmt.format(previousTotal)));
-        compare.appendChild(prevBox);
-
-        compare.appendChild(el('span', 'count-arrow', '→'));
-
-        const curBox = el('div', 'count-box');
-        curBox.appendChild(el('span', 'cb-label', 'Current'));
-        curBox.appendChild(el('span', 'cb-val', fmt.format(total)));
-        compare.appendChild(curBox);
-
-        const diffBox = el('div', 'diff-box');
-        diffBox.appendChild(el('span', 'cb-label', 'Diff'));
-        diffBox.appendChild(el('span', `cb-val ${diffCls}`, `${sign}${fmt.format(totalDelta)}`));
-        compare.appendChild(diffBox);
-
-        // breakdown tooltip
         const breakdown = Object.entries(statusDeltas)
           .filter(([, d]) => d !== 0)
           .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
           .map(([s, d]) => `${s}: ${d > 0 ? '+' : ''}${fmt.format(d)}`)
           .join('\n');
-        compare.title = `Snapshot: ${snapshotAge(snapshotAt)}` + (breakdown ? '\n' + breakdown : '');
-
-        totalGroup.appendChild(compare);
-        totalGroup.appendChild(el('span', 'snap-age', `Snapshot ${snapshotAge(snapshotAt)}`));
+        statsBlock.title = `Snapshot: ${age}` + (breakdown ? '\n' + breakdown : '');
       } else {
-        // No snapshot yet — just show current total
-        totalGroup.appendChild(el('span', 'coll-total', fmt.format(total)));
-        totalGroup.appendChild(el('span', 'snap-age', 'Prev count available after 1hr'));
+        statsBlock.appendChild(makeStatRow('Current', fmt.format(total), 'cur'));
+        statsBlock.appendChild(el('span', 'snap-age', 'Prev count available after 1hr'));
       }
 
-      head.appendChild(totalGroup);
+      head.appendChild(statsBlock);
 
       if (!rows.length) {
         box.appendChild(el('div', 'empty', 'No records'));
         return box;
       }
 
+      // ── Rows table ──
       const list = el('ul', 'rows');
       const th = el('li', 'th');
       th.append(
