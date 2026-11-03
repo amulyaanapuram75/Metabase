@@ -206,6 +206,30 @@
 
     .banner { margin-bottom: 20px; }
 
+
+    /* Delta summary block */
+    .delta-block { font-size: 11.5px; text-align: right; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 4px; }
+    .delta-row { display: flex; justify-content: flex-end; gap: 8px; line-height: 1.55; }
+    .delta-label { color: var(--muted); }
+    .delta-val { font-weight: 600; min-width: 60px; text-align: right; }
+    .delta-val.pos { color: #4ade80; }
+    .delta-val.neg { color: var(--err); }
+    .delta-val.zero { color: var(--muted); }
+
+    /* DriveChangeIdDetails table */
+    .drive-changes { display:flex; flex-direction:column; gap:0; }
+    .drive-changes-title { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+    .drive-changes-wrap { overflow-x:auto; max-height:340px; overflow-y:auto; border-radius:6px; border:1px solid rgba(255,255,255,0.07); }
+    .drive-changes table { width:100%; border-collapse:collapse; font-size:12px; }
+    .drive-changes th { position:sticky; top:0; background:var(--card); color:var(--accent); font-weight:700; text-align:left; padding:7px 10px; border-bottom:1px solid rgba(255,255,255,0.1); white-space:nowrap; }
+    .drive-changes td { padding:6px 10px; border-bottom:1px solid rgba(255,255,255,0.05); color:var(--fg); vertical-align:top; }
+    .drive-changes tr:last-child td { border-bottom:none; }
+    .drive-changes td.mono { font-family:monospace; font-size:11px; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .drive-changes td.status-cell { font-weight:600; white-space:nowrap; }
+    .drive-changes td.status-cell.processed { color:#4ade80; }
+    .drive-changes td.status-cell.failed { color:var(--err); }
+    .drive-changes-empty { color:var(--muted); font-size:13px; padding:12px 0; }
+
     @media (max-width: 720px) {
       .wrap { padding: 20px 16px 40px; }
       .colls { grid-template-columns: 1fr; }
@@ -226,9 +250,10 @@
         <span class="updated" id="updated"></span>
         <select id="auto" aria-label="Auto refresh">
           <option value="0">Auto-refresh: off</option>
-          <option value="60">Every 1 min</option>
-          <option value="300">Every 5 min</option>
-          <option value="900">Every 15 min</option>
+          <option value="1800">Every 30 min</option>
+          <option value="3600">Every 1 hour</option>
+          <option value="7200">Every 2 hours</option>
+          <option value="10800">Every 3 hours</option>
         </select>
         <button id="refresh">Refresh</button>
       </div>
@@ -297,6 +322,15 @@
     const MAX_COMBOS_SHOWN = 3;
 
     const sortRows = rows => [...rows].sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
+
+    function snapshotAge(ts) {
+      const mins = Math.round((Date.now() - ts) / 60000);
+      if (mins < 2) return 'just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      const rem = mins % 60;
+      return rem ? `${hrs}h ${rem}m ago` : `${hrs}h ago`;
+    }
 
     // Tab-separated so it pastes into Excel/Sheets as columns and still reads as text
     function collectionText(database, c) {
@@ -466,7 +500,36 @@
 
       const rows = sortRows(c.rows);
       const { total } = stats(rows);
-      head.appendChild(el('span', 'coll-total', fmt.format(total)));
+      const totalGroup = el('div');
+      totalGroup.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;line-height:1.3';
+      totalGroup.appendChild(el('span', 'coll-total', fmt.format(total)));
+      if (c.delta != null) {
+        const { totalDelta, statusDeltas, snapshotAt, previousTotal } = c.delta;
+        const sign = totalDelta > 0 ? '+' : '';
+        const diffCls = totalDelta > 0 ? 'pos' : totalDelta < 0 ? 'neg' : 'zero';
+
+        const block = el('div', 'delta-block');
+
+        const makeRow = (label, val, cls) => {
+          const row = el('div', 'delta-row');
+          row.appendChild(el('span', 'delta-label', label));
+          row.appendChild(el('span', `delta-val${cls ? ' ' + cls : ''}`, val));
+          return row;
+        };
+        block.appendChild(makeRow('Previous count', fmt.format(previousTotal)));
+        block.appendChild(makeRow('Current count', fmt.format(total)));
+        block.appendChild(makeRow('Difference', `${sign}${fmt.format(totalDelta)}`, diffCls));
+
+        // tooltip shows per-status breakdown
+        const breakdown = Object.entries(statusDeltas)
+          .filter(([, d]) => d !== 0)
+          .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
+          .map(([s, d]) => `${s}: ${d > 0 ? '+' : ''}${fmt.format(d)}`)
+          .join('\n');
+        block.title = `Snapshot taken ${snapshotAge(snapshotAt)}` + (breakdown ? '\n' + breakdown : '');
+        totalGroup.appendChild(block);
+      }
+      head.appendChild(totalGroup);
 
       if (!rows.length) {
         box.appendChild(el('div', 'empty', 'No records'));
@@ -488,6 +551,61 @@
       }
       box.appendChild(list);
       return box;
+    }
+
+    function fmtDate(val) {
+      if (!val) return '—';
+      const d = new Date(val);
+      if (isNaN(d)) return String(val);
+      return d.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    function renderDriveChanges(data) {
+      const wrap = el('div', 'drive-changes');
+      wrap.appendChild(el('div', 'drive-changes-title', 'DriveChangeIdDetails'));
+      if (data.error) {
+        wrap.appendChild(el('div', 'drive-changes-empty', data.error));
+        return wrap;
+      }
+      const rows = data.rows || [];
+      if (!rows.length) {
+        wrap.appendChild(el('div', 'drive-changes-empty', 'No records found'));
+        return wrap;
+      }
+      // Resolve actual field keys case-insensitively from the first row
+      const firstKeys = Object.keys(rows[0] || {});
+      const findKey = name => firstKeys.find(k => k.toLowerCase() === name.toLowerCase()) || name;
+      const kId     = findKey('MoveWorkSpaceId');
+      const kCDate  = findKey('CreatedDate');
+      const kNRDate = findKey('NextRunDate');
+      const kStatus = findKey('Status');
+
+      const tableWrap = el('div', 'drive-changes-wrap');
+      const table = el('table');
+      const thead = el('thead');
+      const hr = el('tr');
+      ['MoveWorkSpaceId', 'CreatedDate', 'NextRunDate', 'Status'].forEach(h => hr.appendChild(el('th', null, h)));
+      thead.appendChild(hr);
+      table.appendChild(thead);
+      const tbody = el('tbody');
+      for (const row of rows) {
+        const tr = el('tr');
+        const idTd = el('td', 'mono');
+        const id = String(row[kId] ?? '—');
+        idTd.textContent = id;
+        idTd.title = id;
+        tr.appendChild(idTd);
+        tr.appendChild(el('td', null, fmtDate(row[kCDate])));
+        tr.appendChild(el('td', null, fmtDate(row[kNRDate])));
+        const status = String(row[kStatus] ?? '—');
+        const sCls = 'status-cell' + (status === 'PROCESSED' ? ' processed' : /fail|error/i.test(status) ? ' failed' : '');
+        tr.appendChild(el('td', sCls, status));
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      tableWrap.appendChild(table);
+      wrap.appendChild(tableWrap);
+      return wrap;
     }
 
     function renderDb(result) {
@@ -556,6 +674,7 @@
 
       const wsGrid = el('div', 'colls');
       for (const c of result.workspace || []) wsGrid.appendChild(renderCollection(c, result.database));
+      if (result.driveChanges) wsGrid.appendChild(renderDriveChanges(result.driveChanges));
       card.appendChild(wsGrid);
 
       const efGrid = el('div', 'colls');
@@ -641,12 +760,14 @@
         return { text: 'Teams: last send failed', cls: 'err' };
       }
       const last = info.lastSentAt ? ` · last sent ${new Date(info.lastSentAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
-      return info.hourly
-        ? { text: `Teams: hourly on${last}`, cls: 'on' }
-        : { text: `Teams: hourly off${last}`, cls: '' };
+      const intervalLabels = { 30: '30 min', 60: '1 hr', 120: '2 hr', 180: '3 hr' };
+      const label = intervalLabels[info.interval];
+      return label
+        ? { text: `Teams: every ${label}${last}`, cls: 'on' }
+        : { text: `Teams: auto-post off${last}`, cls: '' };
     }
 
-    function renderTeamsPanel(project, stateEl, { headSend, hourly, hourlyInput }) {
+    function renderTeamsPanel(project, stateEl, { headSend, intervalSelect }) {
       const panel = el('div', 'card teams-panel');
       panel.hidden = !openPanels.has(project);
 
@@ -666,7 +787,7 @@
       const help = el('div', 'teams-help',
         `To get the URL: in Teams open Apps → Workflows → search “Send webhook alerts to a chat” → pick the ${project} group chat → Save. ` +
         'Then open that workflow, click its first step “When a Teams webhook request is received”, and copy the HTTP URL ' +
-        '(it ends in logic.azure.com or powerplatform.com). The dashboard server must be running for hourly posts.');
+        '(it ends in logic.azure.com or powerplatform.com). The dashboard server must be running for scheduled posts.');
       panel.append(row1, row2, help);
 
       const setMsg = (text, isError = false) => { msg.textContent = text; msg.className = isError ? 'teams-msg err' : 'teams-msg'; };
@@ -678,11 +799,10 @@
         urlInput.placeholder = info.webhookConfigured
           ? `Saved: ${info.webhookPreview} (paste a new URL to replace it)`
           : 'Paste the Teams Workflows webhook URL';
-        hourlyInput.checked = Boolean(info.hourly);
-        hourlyInput.disabled = !info.webhookConfigured;
-        hourly.classList.toggle('disabled', !info.webhookConfigured);
-        hourly.title = info.webhookConfigured
-          ? `Post the ${project} status to Teams automatically at the start of every hour`
+        intervalSelect.value = String(info.interval ?? 0);
+        intervalSelect.disabled = !info.webhookConfigured;
+        intervalSelect.title = info.webhookConfigured
+          ? `Auto-post the ${project} status to Teams on a schedule`
           : 'Save a Teams webhook URL in Teams settings first';
         headSend.disabled = !info.webhookConfigured;
         headSend.title = info.webhookConfigured
@@ -710,7 +830,7 @@
         try {
           await update({ webhookUrl: url });
           urlInput.value = '';
-          setMsg('Webhook saved. Use Send now to test it and the Hourly to Teams switch for automatic posts.');
+          setMsg('Webhook saved. Use Send now to test it and the schedule dropdown for automatic posts.');
         } catch (err) {
           setMsg(err.message, true);
         } finally {
@@ -718,14 +838,17 @@
         }
       });
 
-      hourlyInput.addEventListener('change', async () => {
-        const on = hourlyInput.checked;
-        hourlyInput.disabled = true;
+      intervalSelect.addEventListener('change', async () => {
+        const mins = Number(intervalSelect.value);
+        const prev = intervalSelect.dataset.prev || '0';
+        intervalSelect.disabled = true;
+        const labels = { 0: 'Auto-post off.', 30: 'Posts every 30 min.', 60: 'Posts every 1 hour.', 120: 'Posts every 2 hours.', 180: 'Posts every 3 hours.' };
         try {
-          await update({ hourly: on });
-          setMsg(on ? 'Hourly updates on: posts at the start of every hour.' : 'Hourly updates off.');
+          await update({ interval: mins });
+          intervalSelect.dataset.prev = String(mins);
+          setMsg(labels[mins] ?? 'Schedule updated.');
         } catch (err) {
-          hourlyInput.checked = !on;
+          intervalSelect.value = prev;
           setMsg(err.message, true);
           panel.hidden = false;
           openPanels.add(project);
@@ -743,7 +866,7 @@
           const json = await res.json();
           projectInfo[project] = { ...projectInfo[project], ...json, error: undefined };
           if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-          setMsg('Sent once. Check the Teams chat. (This does not change hourly updates.)');
+          setMsg('Sent once. Check the Teams chat. (This does not change the auto-post schedule.)');
         } catch (err) {
           setMsg(err.message, true);
           // Show the error even if the settings panel was closed
@@ -778,20 +901,20 @@
       headSend.type = 'button';
       head.appendChild(headSend);
 
-      const hourly = el('label', 'switch');
-      const hourlyInput = el('input');
-      hourlyInput.type = 'checkbox';
-      hourlyInput.setAttribute('role', 'switch');
-      hourly.append(hourlyInput, el('span', 'track'), 'Hourly to Teams');
+      const intervalSelect = el('select');
+      intervalSelect.setAttribute('aria-label', `Auto-post interval for ${project}`);
+      [['0', 'Auto-post: off'], ['30', 'Every 30 min'], ['60', 'Every 1 hr'], ['120', 'Every 2 hr'], ['180', 'Every 3 hr']].forEach(([v, t]) => {
+        const opt = el('option'); opt.value = v; opt.textContent = t; intervalSelect.appendChild(opt);
+      });
 
       const toggle = el('button', 'small', 'Teams settings');
       toggle.type = 'button';
       toggle.title = `Teams webhook for ${project}`;
       head.appendChild(toggle);
-      head.appendChild(hourly);
+      head.appendChild(intervalSelect);
       section.appendChild(head);
 
-      const panel = renderTeamsPanel(project, state, { headSend, hourly, hourlyInput });
+      const panel = renderTeamsPanel(project, state, { headSend, intervalSelect });
       toggle.addEventListener('click', () => {
         panel.hidden = !panel.hidden;
         if (panel.hidden) openPanels.delete(project); else openPanels.add(project);

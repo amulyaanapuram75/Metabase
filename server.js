@@ -50,7 +50,8 @@ function projectOf(database) {
   return (n || original).toUpperCase();
 }
 
-// Per-project Teams settings: { "AJG": { webhookUrl, hourly, lastSentAt, lastError } }.
+// Per-project Teams settings: { "AJG": { webhookUrl, interval, lastSentAt, lastError } }.
+// interval = minutes between auto-posts (0 = off, 30, 60, 120, 180). Legacy boolean `hourly` is treated as interval=60.
 // Holds webhook URLs, which act as secrets, so this file is git-ignored.
 const PROJECTS_FILE = path.join(__dirname, 'projects.json');
 
@@ -76,7 +77,7 @@ function publicProjectSettings(project) {
     project,
     webhookConfigured: Boolean(s.webhookUrl),
     webhookPreview: teams.maskWebhookUrl(s.webhookUrl),
-    hourly: Boolean(s.hourly && s.webhookUrl),
+    interval: s.webhookUrl ? (s.interval ?? (s.hourly ? 60 : 0)) : 0,
     lastSentAt: s.lastSentAt || null,
     lastError: s.lastError || null
   };
@@ -96,6 +97,88 @@ const EXCLUDED_OWNER_REGEX = EXCLUDED_OWNER_DOMAINS.length
 let sessionToken = null;
 let databaseList = null;
 const dbTypeCache = new Map();
+
+// ---------------------------------------------------------------------------
+// Hourly snapshot – stores the previous hour's counts per database/collection
+// so the dashboard can show deltas like "+150 last hr".
+// ---------------------------------------------------------------------------
+const SNAPSHOTS_FILE = path.join(__dirname, 'snapshots.json');
+const SNAPSHOT_MIN_AGE_MS = 5 * 60 * 1000;   // don't diff a just-taken snapshot
+const SNAPSHOT_ROLL_MS    = 60 * 60 * 1000;   // roll baseline forward every hour
+
+function loadSnapshots() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(SNAPSHOTS_FILE, 'utf8'));
+    if (saved && typeof saved === 'object') return saved;
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('Could not read snapshots.json:', err.message);
+  }
+  return {};
+}
+
+let hourlySnapshots = loadSnapshots();
+
+function saveSnapshots() {
+  try {
+    fs.writeFileSync(SNAPSHOTS_FILE, JSON.stringify(hourlySnapshots, null, 2) + '\n');
+  } catch (err) {
+    console.error('Could not save snapshots.json:', err.message);
+  }
+}
+
+// Attaches delta info to each collection by comparing against the stored
+// hourly snapshot, then rolls the snapshot forward when it is ≥ 1 hour old.
+function applySnapshots(name, result) {
+  if (result.error) return result;
+
+  const now = Date.now();
+  const snap = hourlySnapshots[name];
+  const allCollections = [...(result.workspace || []), ...(result.files || [])];
+
+  // Build status→count maps for every healthy collection
+  const currentCounts = {};
+  for (const c of allCollections) {
+    if (!c.error && Array.isArray(c.rows)) {
+      currentCounts[c.collection] = Object.fromEntries(
+        c.rows.map(([s, n]) => [s ?? '(null)', Number(n) || 0])
+      );
+    }
+  }
+
+  // Compute deltas only when snapshot is old enough to be meaningful
+  let deltas = null;
+  if (snap && snap.timestamp && (now - snap.timestamp) >= SNAPSHOT_MIN_AGE_MS) {
+    deltas = {};
+    for (const [collName, current] of Object.entries(currentCounts)) {
+      const prev = snap.collections?.[collName] || {};
+      let totalDelta = 0;
+      const statusDeltas = {};
+      for (const [s, n] of Object.entries(current)) {
+        const d = n - (prev[s] || 0);
+        statusDeltas[s] = d;
+        totalDelta += d;
+      }
+      for (const [s, n] of Object.entries(prev)) {
+        if (!(s in current)) { statusDeltas[s] = -n; totalDelta -= n; }
+      }
+      const previousTotal = Object.values(prev).reduce((s, n) => s + n, 0);
+      deltas[collName] = { totalDelta, statusDeltas, snapshotAt: snap.timestamp, previousTotal };
+    }
+  }
+
+  // Roll snapshot forward once it is at least 1 hour old (or brand-new)
+  if (!snap || (now - snap.timestamp) >= SNAPSHOT_ROLL_MS) {
+    hourlySnapshots[name] = { timestamp: now, collections: currentCounts };
+    saveSnapshots();
+  }
+
+  if (!deltas) return result;
+
+  const attach = cols => (cols || []).map(c =>
+    (!c.error && deltas[c.collection]) ? { ...c, delta: deltas[c.collection] } : c
+  );
+  return { ...result, workspace: attach(result.workspace), files: attach(result.files) };
+}
 
 async function metabaseFetch(pathPart, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -374,12 +457,29 @@ async function loadContentDatabaseStatus(name, databaseId) {
     }
   }
 
-  const [moveWS, fileFolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks] = await Promise.all([
+  async function queryDriveChanges() {
+    try {
+      // Exclude _id only; return all fields so the frontend can pick them
+      // regardless of exact casing in this database's collection
+      const pipeline = [
+        { $project: { _id: 0 } },
+        { $limit: 200 }
+      ];
+      const rows = await withTimeout(runMongoQuery(databaseId, 'DriveChangeIdDetails', pipeline), QUERY_TIMEOUT_MS);
+      return { collection: 'DriveChangeIdDetails', rows };
+    } catch (err) {
+      console.error(`Query failed for ${name}.DriveChangeIdDetails:`, err.message);
+      return { collection: 'DriveChangeIdDetails', error: friendlyError(err) };
+    }
+  }
+
+  const [moveWS, fileFolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks, driveChanges] = await Promise.all([
     querySimple('MoveWorkSpaces',        'MoveWorkSpaces',        workspaceBase),
     queryByUserId('FileFolderInfo',       'FileFolderInfo'),
     queryByUserId('FolderMetadataInfo',   'FolderMetadataInfo'),
     querySimple('CollabarationDetails',  'CollabarationDetails',  null),
     querySimple('HyperLinks',            'HyperLinks',            null),
+    queryDriveChanges(),
   ]);
 
   const allResults = [moveWS, fileFolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks];
@@ -401,6 +501,7 @@ async function loadContentDatabaseStatus(name, databaseId) {
     combinations,
     workspace: [moveWS],
     files:     [fileFolderInfo, folderMetadataInfo, collaborationDetails, hyperlinks],
+    driveChanges,
   };
 }
 
@@ -477,9 +578,11 @@ async function loadDatabaseStatus(name) {
     return { database: name, error: friendlyError(err) };
   }
   const type = await detectDatabaseType(databaseId);
-  if (type === 'content') return loadContentDatabaseStatus(name, databaseId);
-  if (type === 'email')   return loadEmailDatabaseStatus(name, databaseId);
-  return loadMessagingDatabaseStatus(name, databaseId);
+  let result;
+  if (type === 'content') result = await loadContentDatabaseStatus(name, databaseId);
+  else if (type === 'email') result = await loadEmailDatabaseStatus(name, databaseId);
+  else result = await loadMessagingDatabaseStatus(name, databaseId);
+  return applySnapshots(name, result);
 }
 
 // Source -> destination cloud pairs from MessageWorkSpace, most workspaces first.
@@ -608,9 +711,12 @@ app.put('/api/projects/:project/teams', (req, res) => {
       next.webhookUrl = req.body.webhookUrl ? teams.validateWebhookUrl(req.body.webhookUrl) : '';
       if (!next.webhookUrl) next.hourly = false;
     }
-    if (req.body?.hourly !== undefined) {
-      if (req.body.hourly && !next.webhookUrl) throw new Error('Add the Teams webhook URL before turning on hourly updates');
-      next.hourly = Boolean(req.body.hourly);
+    if (req.body?.interval !== undefined) {
+      const mins = Number(req.body.interval);
+      if (![0, 30, 60, 120, 180].includes(mins)) throw new Error('interval must be 0, 30, 60, 120, or 180 minutes');
+      if (mins > 0 && !next.webhookUrl) throw new Error('Add the Teams webhook URL before enabling auto-posts');
+      next.interval = mins;
+      delete next.hourly; // migrate away from legacy field
     }
   } catch (err) {
     return res.status(400).json({ error: err.message });
@@ -668,27 +774,38 @@ app.post('/api/projects/:project/teams/ping', async (req, res) => {
   }
 });
 
-// Sends every project with hourly updates on, at the top of each hour
-async function sendHourlyUpdates() {
-  const due = Object.keys(projectSettings).filter(p => projectSettings[p].hourly && projectSettings[p].webhookUrl);
+// Fires every 30 minutes (at :00 and :30). For each project checks if the current half-hour
+// slot aligns with the configured interval (30, 60, 120, or 180 minutes).
+async function sendScheduledUpdates() {
+  const now = new Date();
+  const minuteOfDay = now.getHours() * 60 + now.getMinutes(); // 0‥1439
+  const due = Object.keys(projectSettings).filter(p => {
+    const s = projectSettings[p];
+    const mins = s.interval ?? (s.hourly ? 60 : 0);
+    if (!mins || !s.webhookUrl) return false;
+    return minuteOfDay % mins === 0;
+  });
   for (const project of due) {
     try {
       await sendProjectStatus(project);
     } catch (err) {
-      console.error(`Hourly Teams update failed for ${project}:`, err.message);
+      console.error(`Scheduled Teams update failed for ${project}:`, err.message);
     }
   }
 }
 
-function scheduleHourlyUpdates() {
+function scheduleUpdates() {
   const now = new Date();
   const next = new Date(now);
-  next.setHours(now.getHours() + 1, 0, 0, 0);
+  // Advance to the next :00 or :30 mark
+  const m = now.getMinutes();
+  const addMins = m < 30 ? (30 - m) : (60 - m);
+  next.setMinutes(now.getMinutes() + addMins, 0, 0);
   setTimeout(async () => {
-    await sendHourlyUpdates();
-    scheduleHourlyUpdates();
+    await sendScheduledUpdates();
+    scheduleUpdates();
   }, next - now);
-  console.log(`Next hourly Teams update at ${next.toLocaleTimeString()}`);
+  console.log(`Next scheduled Teams check at ${next.toLocaleTimeString()}`);
 }
 
 // The dashboard's databases plus every database name Metabase offers, for the picker
@@ -734,5 +851,5 @@ app.delete('/api/databases/:name', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Dashboard running at http://localhost:${PORT}`);
-  scheduleHourlyUpdates();
+  scheduleUpdates();
 });
