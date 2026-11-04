@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Migration Status</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <style>
     :root {
       --bg: #1a1f2b;
@@ -139,7 +142,8 @@
       padding: 12px 20px; border-bottom: 1px solid var(--border);
     }
     .db-name { font-size: 15px; font-weight: 600; }
-    .db-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+    .db-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; flex: 1; }
+    .db-head > .head-group { margin-left: auto; flex-shrink: 0; }
     .combo {
       font-size: 11.5px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
       color: var(--accent); background: var(--accent-bg); border: 1px solid rgba(89, 165, 255, 0.25);
@@ -149,14 +153,16 @@
       font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
       background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums;
     }
-    .colls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .colls { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
     .colls + .colls { border-top: 1px solid var(--border); }
-    .coll { padding: 14px 20px 16px; min-width: 0; }
+    .coll { padding: 14px 20px 16px; min-width: 0; overflow: hidden; }
     .coll + .coll { border-left: 1px solid var(--border); }
-    .coll-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-    .coll-name { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .coll-head { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; margin-bottom: 8px; }
+    .coll-name { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
     .coll-total { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .head-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .head-group { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .coll-head > .head-group { width: 100%; }
+    .db-head > .head-group { margin-left: auto; flex-shrink: 0; }
     button.copy {
       display: inline-flex; align-items: center; gap: 5px;
       padding: 3px 8px; font-size: 12px; font-weight: 500; color: var(--muted);
@@ -169,7 +175,7 @@
 
     .rows { list-style: none; margin: 0; padding: 0; }
     .rows li {
-      display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px 64px; align-items: center; gap: 12px;
+      display: grid; grid-template-columns: minmax(0, 1fr) 90px 44px; align-items: center; gap: 8px;
       padding: 7px 4px; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.045);
     }
     .rows li:last-child { border-bottom: 0; }
@@ -179,10 +185,8 @@
     }
     .rows li.th span:not(:first-child) { text-align: right; }
     .rows li:not(.th):hover { background: rgba(255, 255, 255, 0.025); }
-    .status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .status { overflow-wrap: break-word; }
     .count { font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; }
-    .count.prev { color: var(--muted); font-weight: 400; }
-    .count.prev.no-data { color: var(--border); }
     .pct { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 
     .error {
@@ -209,28 +213,26 @@
     .banner { margin-bottom: 20px; }
 
 
-    /* Hourly stats — shown in top-right of collection header, stacked vertically */
+    /* Hourly stats — stacked vertically below the collection name */
     .coll-stats {
-      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
     }
     .stat-row {
-      display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+      display: flex; align-items: center; gap: 6px;
     }
     .stat-label {
-      font-size: 10px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.07em; color: var(--muted);
+      font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap;
     }
     .stat-val {
-      font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums;
-      letter-spacing: -0.01em; line-height: 1.1;
+      font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
     }
-    .stat-val.prev  { color: var(--muted); font-size: 15px; }
+    .stat-val.prev  { color: var(--muted); }
     .stat-val.cur   { color: var(--text); }
     .stat-val.pos   { color: #4ade80; }
     .stat-val.neg   { color: var(--err); }
     .stat-val.zero  { color: var(--muted); }
-    .stat-val.none  { color: var(--border); font-size: 13px; }
-    .snap-age { font-size: 10px; color: var(--muted); }
+    .stat-val.none  { color: var(--border); }
+    .snap-age { font-size: 9px; color: var(--muted); }
 
     /* DriveChangeIdDetails table */
     .drive-changes { display:flex; flex-direction:column; gap:0; }
@@ -519,7 +521,9 @@
       // ── Header: collection name + copy button + stats in top-right ──
       const head = el('div', 'coll-head');
       const left = el('div', 'head-group');
-      left.appendChild(el('span', 'coll-name', c.collection));
+      const nameEl = el('span', 'coll-name', c.collection);
+      nameEl.title = c.collection;
+      left.appendChild(nameEl);
       left.appendChild(copyButton(`Copy ${c.collection} statuses for ${database}`, () => collectionText(database, c), true));
       head.appendChild(left);
       box.appendChild(head);
@@ -578,31 +582,16 @@
       const th = el('li', 'th');
       th.append(
         el('span', null, 'ProcessStatus'),
-        el('span', null, 'Prev Count'),
         el('span', null, 'Count'),
         el('span', null, '%')
       );
       list.appendChild(th);
-      const statusDeltas = c.delta?.statusDeltas || null;
       for (const [status, count] of rows) {
         const li = el('li');
         const name = el('span', 'status', status ?? '(null)');
         name.title = status ?? '(null)';
         li.appendChild(name);
-
         const cur = Number(count) || 0;
-        const key = status ?? '(null)';
-        if (statusDeltas) {
-          const diff = statusDeltas[key] ?? 0;
-          const prev = cur - diff;
-          const prevEl = el('span', 'count prev', fmt.format(prev));
-          if (diff > 0) prevEl.title = `+${fmt.format(diff)} since snapshot`;
-          else if (diff < 0) prevEl.title = `${fmt.format(diff)} since snapshot`;
-          li.appendChild(prevEl);
-        } else {
-          li.appendChild(el('span', 'count prev no-data', '—'));
-        }
-
         li.appendChild(el('span', 'count', fmt.format(cur)));
         li.appendChild(el('span', 'pct', pct(cur, total)));
         list.appendChild(li);
